@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background-color: #ffffff;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+@layer utilities {
+  /* Carbon Fiber Background Pattern - Light Subtlety */
+  .bg-carbon {
+    background-color: #fafafa;
+    background-image: 
+      radial-gradient(#e4e4e7 15%, transparent 16%),
+      radial-gradient(#e4e4e7 15%, transparent 16%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+
+  /* Checkered Flag Accent Pattern - Light Subtlety */
+  .bg-checkered {
+    background-image: conic-gradient(#f4f4f5 90deg, #ffffff 90deg 180deg, #f4f4f5 180deg 270deg, #ffffff 270deg);
+    background-size: 24px 24px;
+  }
+
+  /* Subtle Checkered Accent Bar */
+  .checkered-bar {
+    background-image: linear-gradient(45deg, #18181b 25%, transparent 25%), 
+                      linear-gradient(-45deg, #18181b 25%, transparent 25%), 
+                      linear-gradient(45deg, transparent 75%, #18181b 75%), 
+                      linear-gradient(-45deg, transparent 75%, #18181b 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+  }
+
+  /* Redline Glow Effect */
+  .redline-glow {
+    box-shadow: 0 0 25px rgba(220, 38, 38, 0.25);
+  }
+
+  .redline-glow-lg {
+    box-shadow: 0 0 45px rgba(220, 38, 38, 0.35);
+  }
+
+  /* Speed Line Accent */
+  .speed-stripes {
+    background: repeating-linear-gradient(
+      -45deg,
+      #dc2626,
+      #dc2626 12px,
+      #18181b 12px,
+      #18181b 24px
+    );
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f4f4f5;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #dc2626;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #b91c1c;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+@keyframes uploadGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0), 0 0 35px rgba(239, 68, 68, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes photoSheenSweep {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  60% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(200%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+@keyframes badgePopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s infinite ease-in-out;
+}
+
+.animate-upload-glow {
+  animation: uploadGlow 2s ease-out;
+}
+
+.animate-sheen-sweep {
+  animation: photoSheenSweep 1.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-badge-pop {
+  animation: badgePopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

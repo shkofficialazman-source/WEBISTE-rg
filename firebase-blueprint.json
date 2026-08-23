@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase order in the collector store",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "shipping": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "giftNote": { "type": "string" },
+        "status": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "courierName": { "type": "string" },
+        "trackingUrl": { "type": "string" },
+        "shippedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["orderNumber", "customerName", "customerPhone", "customerAddress", "total"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Diecast or collector product item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "image": { "type": "string" },
+        "galleryImages": { "type": "array" },
+        "description": { "type": "string" },
+        "shortTagline": { "type": "string" },
+        "isBestseller": { "type": "boolean" },
+        "isNewRelease": { "type": "boolean" },
+        "stockCount": { "type": "number" },
+        "requiresPhotoUpload": { "type": "boolean" },
+        "collectorSpecs": { "type": "object" },
+        "giftFeatures": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "price", "image", "category"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Subscriber to the VIP Pit Pass email newsletter",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" },
+        "source": { "type": "string" },
+        "tags": { "type": "array" },
+        "couponCodeIssued": { "type": "string" },
+        "subscribedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "status"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered user account profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Store customer orders collection"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store inventory products collection"
+    },
+    "/newsletter_subscribers/{subscriberId}": {
+      "schema": "NewsletterSubscriber",
+      "description": "VIP newsletter subscribers collection"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Customer and admin user profile collection"
+    }
+  }
+}
