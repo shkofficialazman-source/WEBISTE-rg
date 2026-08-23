@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles, Trophy, User, LogOut, Package, ChevronDown, Heart } from 'lucide-react';
 import { UserProfile } from '../types';
 import { getWishlistIds, subscribeToWishlist } from '../wishlist';
+import { RedlineLogo } from './RedlineLogo';
 
 interface NavbarProps {
   cartCount: number;
@@ -71,24 +72,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand Logo & Name */}
         <button 
           onClick={() => handleNavClick('hero')} 
-          className="flex items-center gap-2 sm:gap-3 group text-left focus:outline-hidden min-h-[44px] cursor-pointer"
+          className="flex items-center gap-2 group text-left focus:outline-hidden min-h-[44px] cursor-pointer"
+          aria-label="Redline Garage Home"
         >
-          <div className="relative w-9 h-9 sm:w-11 sm:h-11 bg-red-600 rounded-lg flex items-center justify-center text-white font-black text-base sm:text-xl tracking-tighter shadow-md shadow-red-600/20 group-hover:bg-red-500 transition-colors border border-red-400/30 shrink-0">
-            {/* Speed stripes graphic */}
-            <div className="absolute inset-0 rounded-lg bg-checkered opacity-20"></div>
-            <span className="relative font-black italic">RG</span>
-            <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-zinc-900 rounded-full border-2 border-white"></div>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="font-extrabold text-base sm:text-xl tracking-tight text-zinc-900 uppercase italic font-mono leading-none">
-                REDLINE<span className="text-red-600">.</span>GARAGE
-              </span>
-            </div>
-            <div className="text-[8px] sm:text-[10px] text-zinc-500 uppercase tracking-wider sm:tracking-widest font-mono font-medium truncate max-w-[150px] sm:max-w-none">
-              HOT WHEELS & GIFTS
-            </div>
-          </div>
+          <RedlineLogo variant="full" theme="light" />
         </button>
 
         {/* Desktop Navigation Links */}

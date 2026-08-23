@@ -1,11 +1,61 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import compression from 'compression';
+import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+
+// Initialize environment variables from .env / .env.local for local & production Hostinger deployments
+dotenv.config();
+try {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+} catch {
+  // Ignore filesystem errors if .env is not present (e.g. injected via container env)
+}
+
+/**
+ * Robust helper to retrieve and sanitize GEMINI_API_KEY across all deployment environments (AI Studio, Hostinger hPanel, Docker)
+ */
+function getGeminiApiKey(): { key: string | undefined; source: string } {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) {
+    return { key: process.env.GEMINI_API_KEY.trim(), source: 'process.env.GEMINI_API_KEY' };
+  }
+  if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().length > 0) {
+    return { key: process.env.GOOGLE_API_KEY.trim(), source: 'process.env.GOOGLE_API_KEY' };
+  }
+  if (process.env.VITE_GEMINI_API_KEY && process.env.VITE_GEMINI_API_KEY.trim().length > 0) {
+    return { key: process.env.VITE_GEMINI_API_KEY.trim(), source: 'process.env.VITE_GEMINI_API_KEY' };
+  }
+  return { key: undefined, source: 'NONE' };
+}
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // 1. Enable Gzip / Deflate HTTP Compression for all text, JSON, JS, CSS, and HTML responses
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+    threshold: 1024, // compress responses above 1KB
+  }));
+
+  // 2. Canonical 1-hop URL normalization (avoid multiple redirects chains)
+  app.use((req, res, next) => {
+    // Avoid redirect chains for root or static files
+    if (req.path.length > 1 && req.path.endsWith('/')) {
+      const query = req.url.slice(req.path.length);
+      const cleanPath = req.path.slice(0, -1);
+      return res.redirect(301, cleanPath + query);
+    }
+    next();
+  });
 
   // Increase payload size limit to accept base64 image data
   app.use(express.json({ limit: '50mb' }));
@@ -25,10 +75,10 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing imageBase64 data in request body' });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const { key: apiKey } = getGeminiApiKey();
       if (!apiKey) {
         return res.status(500).json({
-          error: 'GEMINI_API_KEY is not configured on the server. Please add your Gemini API Key in the AI Studio Settings > Secrets panel.',
+          error: 'GEMINI_API_KEY is not configured on the server. Please add your Gemini API Key in the Hostinger hPanel or AI Studio Settings.',
         });
       }
 
@@ -131,14 +181,26 @@ async function startServer() {
 
   // Server-side Gemini API route for "Scan Your Hot Wheels" (Value Scanner)
   app.post('/api/gemini/scan-hotwheels', async (req, res) => {
+    const scanStartTime = Date.now();
+    console.log(`[ValueScanner Server Diagnostic ${new Date().toISOString()}] Received scan request.`);
+
     try {
       const { imageBase64, mimeType = 'image/jpeg' } = req.body;
 
-      if (!imageBase64) {
-        return res.status(400).json({ error: 'Missing imageBase64 data in request body' });
+      if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
+        console.warn('[ValueScanner Server Diagnostic] 400 Bad Request: Missing or invalid imageBase64 in request body');
+        return res.status(400).json({
+          success: false,
+          errorType: 'invalid_input',
+          error: 'Missing or corrupted image data. Please upload a valid JPG, PNG, or WEBP photo.',
+          elapsedMs: Date.now() - scanStartTime,
+        });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const { key: apiKey, source: apiKeySource } = getGeminiApiKey();
+      const isApiKeySet = Boolean(apiKey && apiKey.length > 0);
+
+      console.log(`[ValueScanner Server Diagnostic] Environment Key Check: configured=${isApiKeySet}, source=${apiKeySource}, keyLength=${apiKey?.length || 0}`);
 
       // Extract raw base64 and mime type
       let rawBase64 = imageBase64;
@@ -152,11 +214,15 @@ async function startServer() {
         rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
       }
 
-      if (!apiKey) {
+      if (!isApiKeySet) {
+        console.warn('[ValueScanner Server Diagnostic] NOTICE: GEMINI_API_KEY is not defined in environment. For Hostinger deployments: Add GEMINI_API_KEY in Hostinger hPanel -> Advanced / Node.js -> Environment Variables.');
         // High quality fallback appraisal if no API key is attached yet
         return res.json({
           success: true,
           isAiLive: false,
+          isApiKeyConfigured: false,
+          apiKeySource: 'NONE',
+          diagnosticNotice: 'GEMINI_API_KEY is not configured on this host. Using high-fidelity valuation engine template.',
           data: {
             isHotWheelsOrDiecast: true,
             carModelName: 'Nissan Skyline GT-R (BNR34) / JDM Die-Cast Spec',
@@ -173,7 +239,7 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({
-        apiKey,
+        apiKey: apiKey!,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -202,16 +268,21 @@ Return ONLY a valid JSON object with the following fields:
 If the image is too blurry or not a die-cast car at all, set "isHotWheelsOrDiecast": false and provide friendly advice in "valueExplanation".
 Do NOT include markdown backticks around the json if possible, or format as pure JSON.`;
 
-      // Model cascade to prevent single-model 503 / high demand bottlenecks
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite'];
+      // Model cascade with active, supported Gemini vision models
+      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
       let lastErr: any = null;
+      let lastErrMessage = '';
       let parsedData: any = null;
+      let modelUsed = '';
 
       const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
       for (const modelName of modelsToTry) {
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
+            console.log(`[ValueScanner Server Diagnostic] Invoking vision model: ${modelName} (attempt ${attempt}/2, image payload length: ${rawBase64.length})`);
+            const attemptStart = Date.now();
+
             const response = await ai.models.generateContent({
               model: modelName,
               contents: {
@@ -232,33 +303,56 @@ Do NOT include markdown backticks around the json if possible, or format as pure
               },
             });
 
+            const elapsed = Date.now() - attemptStart;
+            console.log(`[ValueScanner Server Diagnostic] ${modelName} responded in ${elapsed}ms. Response text length: ${response.text?.length || 0}`);
+
             if (response.text) {
               try {
-                const cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                let cleanText = response.text.trim();
+                if (cleanText.includes('```json')) {
+                  cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                } else if (cleanText.includes('```')) {
+                  cleanText = cleanText.replace(/```/g, '').trim();
+                }
+                
+                // If text contains JSON embedded in commentary
+                const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  cleanText = jsonMatch[0];
+                }
+
                 parsedData = JSON.parse(cleanText);
                 if (parsedData && typeof parsedData === 'object') {
+                  modelUsed = modelName;
+                  console.log(`[ValueScanner Server Diagnostic] SUCCESS: Parsed valuation payload using ${modelName} for "${parsedData.carModelName || 'Unknown'}" in ${Date.now() - scanStartTime}ms total.`);
                   break; // Successfully got and parsed the model output!
                 }
-              } catch (parseErr) {
-                console.warn(`JSON parse error on ${modelName} (attempt ${attempt}):`, parseErr);
+              } catch (parseErr: any) {
+                console.warn(`[ValueScanner Server Diagnostic] JSON parse warning on ${modelName} (attempt ${attempt}): ${parseErr?.message}`);
               }
             }
           } catch (callErr: any) {
             lastErr = callErr;
-            const errMsg = (callErr?.message || '').toLowerCase();
-            const isTransient =
-              errMsg.includes('503') ||
-              errMsg.includes('unavailable') ||
-              errMsg.includes('high demand') ||
-              errMsg.includes('429') ||
-              errMsg.includes('resource_exhausted') ||
-              errMsg.includes('overloaded') ||
-              errMsg.includes('rate limit');
+            lastErrMessage = callErr?.message || String(callErr);
+            const errMsg = lastErrMessage.toLowerCase();
+            const isDeprecatedOrNotFound = errMsg.includes('404') || errMsg.includes('not_found') || errMsg.includes('no longer available');
+            const isQuota = errMsg.includes('429') || errMsg.includes('resource_exhausted') || errMsg.includes('quota') || errMsg.includes('rate limit');
+            const isBusy = errMsg.includes('503') || errMsg.includes('unavailable') || errMsg.includes('high demand') || errMsg.includes('overloaded');
+            const isTimeout = errMsg.includes('timeout') || errMsg.includes('deadline_exceeded') || errMsg.includes('etimedout');
 
-            console.warn(`Gemini scanner (${modelName}, attempt ${attempt}) failed:`, callErr?.message || callErr);
+            console.error(`[ValueScanner Server Diagnostic] ERROR on model "${modelName}" (attempt ${attempt}/2): ${lastErrMessage}`);
 
-            if (isTransient && attempt < 2) {
-              await delay(1000);
+            if (isQuota) {
+              console.error(`[ValueScanner Server Diagnostic] RATE LIMIT NOTICE: Quota reached for model ${modelName}. Note: Shared quota across Chatbot, Card Stylizer, and Scanner may contribute to RPM/TPM limits.`);
+            }
+
+            if (isDeprecatedOrNotFound) {
+              break; // Don't retry deprecated model, go to next
+            }
+
+            if ((isQuota || isBusy || isTimeout) && attempt < 2) {
+              console.log(`[ValueScanner Server Diagnostic] Backing off 800ms before retry on ${modelName}...`);
+              await delay(800);
             } else {
               break; // Try next model in cascade
             }
@@ -271,43 +365,158 @@ Do NOT include markdown backticks around the json if possible, or format as pure
       }
 
       if (!parsedData) {
-        console.warn('Gemini models unavailable, using expert die-cast appraisal engine fallback.');
-        parsedData = {
-          isHotWheelsOrDiecast: true,
-          carModelName: 'Hot Wheels Mainline / Collector Casting',
-          seriesAndYear: 'Modern Mainline / Car Culture Series',
-          categoryType: 'Mainline / Collector Spec',
-          conditionAssessment: 'Packaging card appears intact with clear blister bubble and sharp tampo detailing.',
-          estimatedValueMinINR: 349,
-          estimatedValueMaxINR: 699,
-          valueExplanation: 'Popular die-cast casting with active secondary trading liquidity across Indian collector communities and conventions.',
-          collectorTip: 'Always store carded models in 0.5mm PET plastic protectors or UV-safe acrylic cases to preserve blister card edge condition.',
-          confidenceLevel: 'Medium (Standard Market Appraisal)',
-        };
+        console.error(`[ValueScanner Server Diagnostic] ALL MODELS FAILED in cascade (${modelsToTry.join(', ')}). Total elapsed: ${Date.now() - scanStartTime}ms. Last error: ${lastErrMessage}`);
+        const errMsgLower = lastErrMessage.toLowerCase();
+        const isQuota = errMsgLower.includes('429') || errMsgLower.includes('quota') || errMsgLower.includes('resource_exhausted') || errMsgLower.includes('rate limit');
+        const isBusy = errMsgLower.includes('503') || errMsgLower.includes('unavailable') || errMsgLower.includes('high demand') || errMsgLower.includes('overloaded');
+        const isTimeout = errMsgLower.includes('timeout') || errMsgLower.includes('deadline_exceeded') || errMsgLower.includes('etimedout') || errMsgLower.includes('network');
+
+        if (isQuota) {
+          return res.status(429).json({
+            success: false,
+            errorType: 'quota_exceeded',
+            error: 'Scanner is temporarily at capacity (Gemini API quota reached). Please try again in a few moments or check shared API key quota.',
+            rawError: lastErrMessage,
+            isApiKeyConfigured: true,
+            apiKeySource,
+            elapsedMs: Date.now() - scanStartTime,
+          });
+        }
+
+        if (isTimeout) {
+          return res.status(504).json({
+            success: false,
+            errorType: 'network_timeout',
+            error: 'Upstream connection timed out while analyzing the car image. Please try again.',
+            rawError: lastErrMessage,
+            isApiKeyConfigured: true,
+            apiKeySource,
+            elapsedMs: Date.now() - scanStartTime,
+          });
+        }
+
+        if (isBusy) {
+          return res.status(503).json({
+            success: false,
+            errorType: 'service_busy',
+            error: 'Gemini AI service is currently experiencing high traffic. Please tap "Retry Scan Now" in a few seconds.',
+            rawError: lastErrMessage,
+            isApiKeyConfigured: true,
+            apiKeySource,
+            elapsedMs: Date.now() - scanStartTime,
+          });
+        }
+
+        // Internal API / Server error fallback
+        return res.status(500).json({
+          success: false,
+          errorType: 'internal_api_error',
+          error: lastErrMessage || 'Internal AI engine error occurred during photo appraisal.',
+          rawError: lastErrMessage,
+          isApiKeyConfigured: true,
+          apiKeySource,
+          elapsedMs: Date.now() - scanStartTime,
+        });
       }
 
       return res.json({
         success: true,
         isAiLive: true,
+        isApiKeyConfigured: true,
+        apiKeySource,
+        modelUsed,
+        elapsedMs: Date.now() - scanStartTime,
         data: parsedData,
       });
     } catch (err: any) {
-      console.error('Gemini Value Scanner Error:', err);
+      console.error('[ValueScanner Server Diagnostic] Unexpected Top-Level Scanner Exception:', err);
       const errMsg = (err?.message || '').toLowerCase();
-      const isBusy =
-        errMsg.includes('503') ||
-        errMsg.includes('unavailable') ||
-        errMsg.includes('high demand') ||
-        errMsg.includes('429') ||
-        errMsg.includes('resource_exhausted');
+      const isQuota = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('resource_exhausted');
+      const isBusy = errMsg.includes('503') || errMsg.includes('unavailable') || errMsg.includes('high demand') || errMsg.includes('overloaded');
+      const isTimeout = errMsg.includes('timeout') || errMsg.includes('network') || errMsg.includes('etimedout');
 
-      return res.status(isBusy ? 503 : 500).json({
+      const statusCode = isQuota ? 429 : isBusy ? 503 : isTimeout ? 504 : 500;
+      const errorType = isQuota ? 'quota_exceeded' : isBusy ? 'service_busy' : isTimeout ? 'network_timeout' : 'internal_api_error';
+
+      return res.status(statusCode).json({
         success: false,
-        errorType: isBusy ? 'service_busy' : 'general',
-        error: isBusy
+        errorType,
+        error: isQuota
+          ? 'Gemini API rate limit or quota exceeded. Please wait a moment.'
+          : isBusy
           ? 'Our scanner is a bit busy right now — please try again in a few seconds'
-          : 'Could not complete the car scan. Please try a clearer picture.',
+          : isTimeout
+          ? 'Network timeout during scan. Please retry.'
+          : 'Could not complete the car scan. Internal AI engine error.',
+        rawError: err?.message || String(err),
+        elapsedMs: Date.now() - scanStartTime,
       });
+    }
+  });
+
+  // Comprehensive System Diagnostics Endpoint for Gemini API & Deployment Verification
+  app.get('/api/diagnostics/gemini', async (req, res) => {
+    const { key: apiKey, source: apiKeySource } = getGeminiApiKey();
+    const isApiKeySet = Boolean(apiKey && apiKey.length > 0);
+    const maskedKey = isApiKeySet
+      ? `${apiKey!.slice(0, 6)}...${apiKey!.slice(-4)} (Length: ${apiKey!.length})`
+      : 'NOT_FOUND';
+
+    const diagnosticResult: any = {
+      timestamp: new Date().toISOString(),
+      nodeEnv: process.env.NODE_ENV || 'development',
+      geminiApiKeyConfigured: isApiKeySet,
+      geminiApiKeySource: apiKeySource,
+      geminiApiKeyMasked: maskedKey,
+      hostingerDeploymentGuide: {
+        settingLocation: 'Hostinger hPanel -> Advanced / Node.js -> App -> Environment Variables OR .env file in root directory',
+        keyNameRequired: 'GEMINI_API_KEY',
+        status: isApiKeySet ? 'CONFIGURED' : 'ACTION_REQUIRED: Set GEMINI_API_KEY in Hostinger Environment Variables',
+        note: 'Hostinger Node.js Passenger runtime reads environment variables configured in hPanel or root .env.',
+      },
+      sharedQuotaFeatures: [
+        'AI Value Scanner (/api/gemini/scan-hotwheels)',
+        'Hot Wheels AI Pit Crew Chatbot (/api/gemini/chat)',
+        'Custom Blister Card Stylizer (/api/gemini/stylize-card)',
+      ],
+      liveProbe: {
+        status: 'pending',
+        latencyMs: 0,
+        modelTested: 'gemini-3.1-flash-lite',
+      },
+    };
+
+    if (!isApiKeySet) {
+      diagnosticResult.liveProbe.status = 'SKIPPED_NO_API_KEY';
+      diagnosticResult.liveProbe.message = 'Set GEMINI_API_KEY in environment variables to enable live AI queries.';
+      return res.json(diagnosticResult);
+    }
+
+    try {
+      const probeStart = Date.now();
+      const ai = new GoogleGenAI({
+        apiKey: apiKey!,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+      });
+
+      const probeRes = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: 'Ping: Reply with {"status":"ok","garage":"Redline Garage"} in json',
+        config: { responseMimeType: 'application/json' },
+      });
+
+      diagnosticResult.liveProbe.status = 'SUCCESS_ONLINE';
+      diagnosticResult.liveProbe.latencyMs = Date.now() - probeStart;
+      diagnosticResult.liveProbe.reply = probeRes.text?.trim();
+      return res.json(diagnosticResult);
+    } catch (probeErr: any) {
+      diagnosticResult.liveProbe.status = 'PROBE_FAILED';
+      diagnosticResult.liveProbe.error = probeErr?.message || String(probeErr);
+      diagnosticResult.liveProbe.isQuotaError =
+        probeErr?.message?.includes('429') ||
+        probeErr?.message?.toLowerCase().includes('quota') ||
+        probeErr?.message?.toLowerCase().includes('resource_exhausted');
+      return res.status(diagnosticResult.liveProbe.isQuotaError ? 429 : 500).json(diagnosticResult);
     }
   });
 
@@ -320,7 +529,7 @@ Do NOT include markdown backticks around the json if possible, or format as pure
         return res.status(400).json({ error: 'Messages array is required' });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const { key: apiKey } = getGeminiApiKey();
       if (!apiKey) {
         // High quality informative response if no API key is set
         const lastUserMsg = messages[messages.length - 1]?.text || '';
@@ -504,11 +713,123 @@ Keep answers concise, well-structured, energetic, and formatted cleanly with mar
     });
   });
 
-  // Serve static assets directory
-  app.use('/assets', express.static(path.join(process.cwd(), 'public/assets')));
-  app.use('/assets', express.static(path.join(process.cwd(), 'assets')));
+  // Dynamic /sitemap.xml Generation Endpoint
+  app.get('/sitemap.xml', async (req, res) => {
+    try {
+      const BASE_URL = 'https://redlinegarage.in';
+      const today = new Date().toISOString().split('T')[0];
 
-  // Vite middleware for development
+      // Static and main section routes
+      const staticUrls = [
+        { loc: `${BASE_URL}/`, changefreq: 'daily', priority: '1.0' },
+        { loc: `${BASE_URL}/#catalog`, changefreq: 'daily', priority: '0.9' },
+        { loc: `${BASE_URL}/#categories`, changefreq: 'weekly', priority: '0.9' },
+        { loc: `${BASE_URL}/#scanner`, changefreq: 'weekly', priority: '0.85' },
+        { loc: `${BASE_URL}/#custom-builder`, changefreq: 'weekly', priority: '0.85' },
+        { loc: `${BASE_URL}/#why-us`, changefreq: 'monthly', priority: '0.7' },
+        { loc: `${BASE_URL}/#gallery`, changefreq: 'weekly', priority: '0.7' },
+        { loc: `${BASE_URL}/#faq`, changefreq: 'weekly', priority: '0.7' },
+      ];
+
+      // Categories
+      const categorySlugs = ['bouquets', 'frames', 'custom-cards', 'scale-models'];
+      const categoryUrls = categorySlugs.map((slug) => ({
+        loc: `${BASE_URL}/?category=${slug}`,
+        changefreq: 'weekly',
+        priority: '0.8',
+      }));
+
+      // Known collector and flagship products
+      const defaultProductIds = [
+        'bouquet-midnight-supercars',
+        'frame-skyline-gtr-heritage',
+        'custom-card-personal',
+        'scale-jdm-tuners-pack',
+        'bouquet-ferrari-apex-red',
+        'frame-porsche-911-lineage',
+        'scale-muscle-legends-box',
+        'bouquet-fast-furious-edition',
+      ];
+
+      const productUrls = defaultProductIds.map((id) => ({
+        loc: `${BASE_URL}/?product=${encodeURIComponent(id)}`,
+        changefreq: 'weekly',
+        priority: '0.8',
+      }));
+
+      const allUrls = [...staticUrls, ...categoryUrls, ...productUrls];
+
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+${allUrls
+  .map(
+    (u) => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`
+  )
+  .join('\n')}
+</urlset>`;
+
+      res.header('Content-Type', 'application/xml');
+      res.header('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+      return res.send(xml);
+    } catch (err) {
+      console.error('Error generating dynamic sitemap:', err);
+      return res.status(500).send('Error generating sitemap');
+    }
+  });
+
+  // Dynamic /robots.txt Endpoint
+  app.get('/robots.txt', (req, res) => {
+    const robotsTxt = `User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /api/
+
+Sitemap: https://redlinegarage.in/sitemap.xml
+`;
+    res.header('Content-Type', 'text/plain');
+    res.header('Cache-Control', 'public, max-age=86400');
+    return res.send(robotsTxt);
+  });
+
+  // Serve static assets with explicit caching policies
+  const publicPath = path.join(process.cwd(), 'public');
+  const distPath = path.join(process.cwd(), 'dist');
+  const distAssetsPath = path.join(distPath, 'assets');
+  const indexHtmlPath = path.join(distPath, 'index.html');
+  let inMemoryIndexHtml: string | null = null;
+
+  // 1. Long-term immutable caching (1 year) for production fingerprinted assets
+  app.use('/assets', express.static(distAssetsPath, {
+    maxAge: '1y',
+    immutable: true,
+    etag: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  }));
+
+  // 2. Public folder static assets (SVG, PNG, WebP, manifest, favicon)
+  app.use(express.static(publicPath, {
+    maxAge: '1d',
+    etag: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      } else if (/\.(svg|png|jpg|jpeg|webp|ico|json|webmanifest|woff2|woff)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      }
+    },
+  }));
+
+  // Vite middleware for development vs. highly optimized production static serving
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -516,10 +837,35 @@ Keep answers concise, well-structured, energetic, and formatted cleanly with mar
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // Serve dist folder static files with appropriate cache control
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        }
+      },
+    }));
+
+    // Pre-cache index.html into memory to guarantee near-instantaneous (0-2ms) document request latency (TTFB)
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+
+      try {
+        if (!inMemoryIndexHtml && fs.existsSync(indexHtmlPath)) {
+          inMemoryIndexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+        }
+        if (inMemoryIndexHtml) {
+          return res.send(inMemoryIndexHtml);
+        }
+      } catch (e) {
+        console.warn('HTML disk read warning:', e);
+      }
+
+      res.sendFile(indexHtmlPath);
     });
   }
 

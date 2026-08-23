@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, User as UserIcon, ArrowLeft, Loader2, ShieldCheck, Sparkles, CheckCircle2, Cake, Phone } from 'lucide-react';
 import { customerSignInWithEmailPassword, customerSignUpWithEmailPassword } from '../firebase';
 import { UserProfile } from '../types';
+import { RedlineLogo } from './RedlineLogo';
 
 interface CustomerAuthProps {
   onSuccess: (profile: UserProfile) => void;
@@ -93,10 +94,8 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({
 
       <div className="w-full max-w-md z-10">
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-red-600 rounded-2xl shadow-lg shadow-red-600/20 text-white mb-4">
-            <span className="font-black italic text-2xl tracking-tighter">RG</span>
-          </div>
+        <div className="text-center mb-8 flex flex-col items-center">
+          <RedlineLogo variant="badge" size="lg" className="mb-4" />
           <h1 className="text-2xl font-black uppercase tracking-tight font-mono text-zinc-900">
             {mode === 'login' ? 'Customer Account Login' : 'Create Collector Account'}
           </h1>

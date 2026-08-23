@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lock, Mail, ArrowLeft, ShieldAlert, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import { auth, adminLoginWithEmailPassword, ADMIN_EMAIL } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { RedlineLogo } from '../RedlineLogo';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -60,15 +61,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
 
       <div className="w-full max-w-md z-10">
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-red-600 rounded-2xl shadow-lg shadow-red-600/20 text-white mb-4">
-            <span className="font-black italic text-2xl tracking-tighter">RG</span>
-          </div>
+        <div className="text-center mb-8 flex flex-col items-center">
+          <RedlineLogo variant="badge" size="lg" className="mb-4" />
           <h1 className="text-2xl font-black uppercase tracking-tight font-mono text-zinc-900">
             Redline Garage <span className="text-red-600">Admin</span>
           </h1>
           <p className="text-xs text-zinc-500 font-mono mt-1">
-            Authorized Owner Portal & Inventory Management
+            Authorized Owner Portal &amp; Inventory Management
           </p>
         </div>
 

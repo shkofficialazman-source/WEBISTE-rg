@@ -37,6 +37,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const [customDriverName, setCustomDriverName] = useState<string>('');
   const [customCarTitle, setCustomCarTitle] = useState<string>('');
   const [showCustomFields, setShowCustomFields] = useState<boolean>(false);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   // Sync active image and reset modal state when product changes
   React.useEffect(() => {
@@ -220,7 +221,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   >
                     <img
                       src={getOptimizedImageUrl(img, { width: 120, height: 120, quality: 75 })}
-                      alt={`Thumb ${i + 1}`}
+                      alt={`${product.name} diecast view ${i + 1}`}
                       width={56}
                       height={56}
                       className="w-full h-full object-contain"
@@ -232,6 +233,29 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 ))}
               </div>
             )}
+
+            {/* Direct Product Share Link */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const shareUrl = `https://redlinegarage.in/?product=${encodeURIComponent(product.id)}`;
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(shareUrl);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2500);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 text-xs font-mono font-bold transition-all cursor-pointer border px-3 py-1.5 rounded-lg ${
+                  copiedLink
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs'
+                    : 'text-zinc-600 hover:text-red-600 bg-zinc-50 hover:bg-red-50 border-zinc-200 hover:border-red-200'
+                }`}
+              >
+                <span>{copiedLink ? '✓' : '🔗'}</span>
+                <span>{copiedLink ? 'Link Copied to Clipboard!' : 'Copy Direct Product Link'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Right Info & Customization */}

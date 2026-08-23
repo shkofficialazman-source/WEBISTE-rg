@@ -16,6 +16,7 @@ import {
   Gift
 } from 'lucide-react';
 import { subscribeToNewsletterInFirestore } from '../firebase';
+import { RedlineLogo } from './RedlineLogo';
 
 interface FooterProps {
   onNavigate: (sectionId: string) => void;
@@ -306,17 +307,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onSelectCategory, on
           
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-black text-lg italic tracking-tighter shadow-xs">
-                RG
-              </div>
-              <div>
-                <span className="font-extrabold text-xl tracking-tight text-zinc-900 uppercase italic font-mono">
-                  REDLINE<span className="text-red-600">.</span>GARAGE
-                </span>
-                <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
-                  PREMIUM HOT WHEELS GIFTS & WALL ART
-                </div>
+            <div>
+              <RedlineLogo variant="full" theme="light" />
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mt-1">
+                PREMIUM HOT WHEELS GIFTS & WALL ART
               </div>
             </div>
 

@@ -21,8 +21,11 @@ import {
   Calendar,
   Layers,
   Car,
+  Crop,
   Image as ImageIcon,
 } from 'lucide-react';
+import { ImageCropperModal } from './ImageCropperModal';
+import { convertUrlToFile } from '../../utils/imageCropUtils';
 
 export const CollectorSpotlightTab: React.FC = () => {
   const [spotlight, setSpotlight] = useState<CollectorSpotlight>(getCachedCollectorSpotlight);
@@ -30,7 +33,12 @@ export const CollectorSpotlightTab: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreparingReCrop, setIsPreparingReCrop] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Cropper modal state
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [pendingCropFiles, setPendingCropFiles] = useState<File[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -46,7 +54,7 @@ export const CollectorSpotlightTab: React.FC = () => {
     };
   }, []);
 
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -55,10 +63,40 @@ export const CollectorSpotlightTab: React.FC = () => {
       return;
     }
 
+    setPendingCropFiles([file]);
+    setCropModalOpen(true);
+    const fileInput = document.getElementById('collectorPhotoInput') as HTMLInputElement | null;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleReCropPhoto = async () => {
+    const currentUrl = formData.photoUrl || DEFAULT_COLLECTOR_SPOTLIGHT.photoUrl;
+    if (!currentUrl) return;
+
+    try {
+      setIsPreparingReCrop(true);
+      const file = await convertUrlToFile(currentUrl, 'collector_spotlight.jpg');
+      setPendingCropFiles([file]);
+      setCropModalOpen(true);
+    } catch (err: any) {
+      console.error('Failed to prepare collector photo for re-cropping:', err);
+      setStatusMessage({
+        text: 'Could not load photo for re-cropping. Please upload a fresh photo.',
+        type: 'error',
+      });
+    } finally {
+      setIsPreparingReCrop(false);
+    }
+  };
+
+  const handleCropComplete = async (croppedFiles: File[]) => {
+    if (croppedFiles.length === 0) return;
+
     try {
       setIsUploading(true);
       setStatusMessage(null);
 
+      const file = croppedFiles[0];
       let downloadUrl = '';
       try {
         downloadUrl = await uploadImageToSupabase(file, 'products');
@@ -72,7 +110,9 @@ export const CollectorSpotlightTab: React.FC = () => {
 
       if (downloadUrl) {
         setFormData((prev) => ({ ...prev, photoUrl: downloadUrl }));
-        setStatusMessage({ text: 'Collector image uploaded successfully!', type: 'success' });
+        setStatusMessage({ text: 'Collector photo cropped and uploaded successfully!', type: 'success' });
+      } else {
+        setStatusMessage({ text: 'Failed to upload photo to storage. Check network.', type: 'error' });
       }
     } catch (err: any) {
       console.error('Upload error:', err);
@@ -249,24 +289,41 @@ export const CollectorSpotlightTab: React.FC = () => {
                   onChange={handleImageFileChange}
                   className="hidden"
                 />
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('collectorPhotoInput')?.click()}
-                  disabled={isUploading}
-                  className="w-full sm:w-auto bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-4 py-2.5 rounded-xl text-xs font-bold font-mono inline-flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50 border border-zinc-200"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-red-600" />
-                      <span>Uploading Photo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-3.5 h-3.5 text-red-600" />
-                      <span>Upload Collector Photo</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('collectorPhotoInput')?.click()}
+                    disabled={isUploading || isPreparingReCrop}
+                    className="flex-1 sm:flex-initial bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-4 py-2.5 rounded-xl text-xs font-bold font-mono inline-flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50 border border-zinc-200"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-red-600" />
+                        <span>Uploading Photo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-red-600" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleReCropPhoto}
+                    disabled={isUploading || isPreparingReCrop || !formData.photoUrl}
+                    title="Crop or adjust framing of current photo"
+                    className="bg-zinc-100 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 text-zinc-700 px-3 py-2.5 rounded-xl text-xs font-bold font-mono inline-flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 border border-zinc-200"
+                  >
+                    {isPreparingReCrop ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    ) : (
+                      <Crop className="w-3.5 h-3.5 text-amber-600" />
+                    )}
+                    <span>Crop</span>
+                  </button>
+                </div>
 
                 <input
                   type="url"
@@ -356,7 +413,7 @@ export const CollectorSpotlightTab: React.FC = () => {
             </div>
 
             {/* Photo */}
-            <div className="aspect-video w-full relative bg-zinc-100 overflow-hidden border-b border-zinc-200">
+            <div className="aspect-video w-full relative bg-zinc-100 overflow-hidden border-b border-zinc-200 group">
               <img
                 src={formData.photoUrl || DEFAULT_COLLECTOR_SPOTLIGHT.photoUrl}
                 alt={formData.collectorName}
@@ -364,6 +421,19 @@ export const CollectorSpotlightTab: React.FC = () => {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              
+              {/* Quick Crop Button on preview */}
+              <button
+                type="button"
+                onClick={handleReCropPhoto}
+                disabled={isPreparingReCrop || isUploading}
+                title="Crop / Re-frame Photo"
+                className="absolute top-2 right-2 bg-black/70 hover:bg-amber-600 text-white px-2 py-1 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1 transition opacity-90 group-hover:opacity-100 shadow-md cursor-pointer"
+              >
+                <Crop className="w-3 h-3 text-amber-300" />
+                <span>Crop Photo</span>
+              </button>
+
               <div className="absolute bottom-3 left-4 right-4 text-white">
                 <div className="font-black text-lg sm:text-xl font-mono leading-tight">
                   {formData.collectorName || 'Collector Name'}
@@ -399,6 +469,20 @@ export const CollectorSpotlightTab: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Universal Image Cropper Modal for Collector Photo */}
+      <ImageCropperModal
+        isOpen={cropModalOpen}
+        files={pendingCropFiles}
+        defaultAspectRatio="4:3"
+        title="Crop Collector Spotlight Photo"
+        subtitle="Frame your collector portrait or diecast garage showcase (4:3 / 16:9 recommended)."
+        onClose={() => {
+          setCropModalOpen(false);
+          setPendingCropFiles([]);
+        }}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   );
 };

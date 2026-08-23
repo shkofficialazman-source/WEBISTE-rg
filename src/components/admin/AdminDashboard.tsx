@@ -84,13 +84,19 @@ import {
   Printer,
   MessageCircle,
   Share2,
-  Crown
+  Crown,
+  Crop,
 } from 'lucide-react';
+import { ImageCropperModal, AspectRatioOption } from './ImageCropperModal';
+import { convertUrlToFile } from '../../utils/imageCropUtils';
 import { ReferralCodesTab } from './ReferralCodesTab';
 import { LoyaltySettingsTab } from './LoyaltySettingsTab';
 import { SubscribersTab } from './SubscribersTab';
 import { CollectorSpotlightTab } from './CollectorSpotlightTab';
+import { OrderStatusChip } from './OrderStatusChip';
 import { InvoiceModal } from '../InvoiceModal';
+import { RedlineLogo } from '../RedlineLogo';
+import { BrandedLoadingScreen } from '../BrandedLoadingScreen';
 import { awardPointsForOrder } from '../../loyalty';
 import {
   signInWithGoogleForSheets,
@@ -169,6 +175,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBack
   const [uploadProgressText, setUploadProgressText] = useState('');
   const [manualImageUrl, setManualImageUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Universal Cropper Modal State
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [pendingCropFiles, setPendingCropFiles] = useState<File[]>([]);
+  const [cropTarget, setCropTarget] = useState<
+    | { type: 'product_gallery' }
+    | { type: 'category_cover' }
+    | { type: 'gallery_replace'; index: number }
+  >({ type: 'product_gallery' });
+  const [cropDefaultRatio, setCropDefaultRatio] = useState<AspectRatioOption>('1:1');
+  const [cropModalTitle, setCropModalTitle] = useState('Crop Product Photo');
+  const [cropModalSubtitle, setCropModalSubtitle] = useState('Frame your diecast item for catalog cards (1:1 square recommended).');
+  const [isPreparingReCrop, setIsPreparingReCrop] = useState(false);
 
   // Form state for Add/Edit product with multi-image gallery support
   const [formData, setFormData] = useState({
@@ -529,8 +548,8 @@ If you need any assistance with your shipment, feel free to reply directly to th
     setIsAddModalOpen(true);
   };
 
-  // Handle multi-image file selection & upload (Supabase / Storage)
-  const handleImageFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle multi-image file selection & launch interactive cropping tool
+  const handleImageFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -542,6 +561,166 @@ If you need any assistance with your shipment, feel free to reply directly to th
       return;
     }
 
+    setPendingCropFiles(validFiles);
+    setCropTarget({ type: 'product_gallery' });
+    setCropDefaultRatio('1:1');
+    setCropModalTitle(validFiles.length > 1 ? `Crop ${validFiles.length} Product Photos` : 'Crop Product Photo');
+    setCropModalSubtitle('Frame diecast vehicle, blister card, or packaging (1:1 square recommended).');
+    setCropModalOpen(true);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Re-crop an existing photo in the product gallery
+  const handleReCropGalleryImage = async (index: number, imgUrl: string) => {
+    try {
+      setIsPreparingReCrop(true);
+      const file = await convertUrlToFile(imgUrl, `product_photo_${index + 1}.jpg`);
+      setPendingCropFiles([file]);
+      setCropTarget({ type: 'gallery_replace', index });
+      setCropDefaultRatio('1:1');
+      setCropModalTitle('Re-Crop Product Photo');
+      setCropModalSubtitle('Adjust framing, zoom, or aspect ratio for this product image.');
+      setCropModalOpen(true);
+    } catch (err: any) {
+      console.error('Failed to prepare image for re-cropping:', err);
+      setUploadError('Could not load image for re-cropping. You can upload a fresh photo.');
+    } finally {
+      setIsPreparingReCrop(false);
+    }
+  };
+
+  // Handle category cover file selection & launch interactive cropping tool
+  const handleCategoryCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setCategoryUploadError('Please select a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+
+    setPendingCropFiles([file]);
+    setCropTarget({ type: 'category_cover' });
+    setCropDefaultRatio('16:9');
+    setCropModalTitle('Crop Collection Cover Banner');
+    setCropModalSubtitle('Frame your collection showcase banner (16:9 widescreen recommended).');
+    setCropModalOpen(true);
+
+    if (categoryFileInputRef.current) {
+      categoryFileInputRef.current.value = '';
+    }
+  };
+
+  // Re-crop existing category cover image
+  const handleReCropCategoryCover = async () => {
+    if (!categoryFormData.image) return;
+    try {
+      setIsPreparingReCrop(true);
+      const file = await convertUrlToFile(categoryFormData.image, 'category_cover.jpg');
+      setPendingCropFiles([file]);
+      setCropTarget({ type: 'category_cover' });
+      setCropDefaultRatio('16:9');
+      setCropModalTitle('Re-Crop Collection Banner');
+      setCropModalSubtitle('Adjust framing, zoom, or aspect ratio for this collection cover.');
+      setCropModalOpen(true);
+    } catch (err: any) {
+      console.error('Failed to prepare category cover for re-cropping:', err);
+      setCategoryUploadError('Could not load cover for re-cropping. You can upload a fresh image.');
+    } finally {
+      setIsPreparingReCrop(false);
+    }
+  };
+
+  // Universal handler called when cropped files are confirmed from ImageCropperModal
+  const handleCropComplete = async (croppedFiles: File[]) => {
+    if (croppedFiles.length === 0) return;
+
+    // TARGET 1: Category Cover
+    if (cropTarget.type === 'category_cover') {
+      try {
+        setIsUploadingCategoryCover(true);
+        setCategoryUploadError('');
+        setCategoryUploadSuccess(false);
+
+        const file = croppedFiles[0];
+        let downloadUrl = '';
+        try {
+          downloadUrl = await uploadImageToSupabase(file, 'products');
+        } catch (e) {
+          console.warn('Supabase storage upload notice:', e);
+        }
+
+        if (!downloadUrl) {
+          downloadUrl = await uploadProductImageToStorage(file);
+        }
+
+        if (downloadUrl) {
+          setCategoryFormData(prev => ({ ...prev, image: downloadUrl }));
+          setCategoryUploadSuccess(true);
+        } else {
+          setCategoryUploadError('Failed to upload cropped cover.');
+        }
+      } catch (err: any) {
+        console.error('Category cover upload error:', err);
+        setCategoryUploadError(err.message || 'Failed to upload cover image.');
+      } finally {
+        setIsUploadingCategoryCover(false);
+      }
+      return;
+    }
+
+    // TARGET 2: Single Photo Replacement in Product Gallery
+    if (cropTarget.type === 'gallery_replace') {
+      try {
+        setIsUploadingImage(true);
+        setUploadError('');
+        setUploadSuccess(false);
+        setUploadProgressText('Uploading re-cropped photo...');
+
+        const file = croppedFiles[0];
+        let downloadUrl = '';
+        try {
+          downloadUrl = await uploadImageToSupabase(file, 'products');
+        } catch (storageErr) {
+          console.warn('Supabase storage attempt notice:', storageErr);
+        }
+
+        if (!downloadUrl) {
+          downloadUrl = await uploadProductImageToStorage(file);
+        }
+
+        if (downloadUrl) {
+          const targetIndex = cropTarget.index;
+          setFormData(prev => {
+            const currentGallery = [...(prev.galleryImages || [])];
+            const oldUrl = currentGallery[targetIndex];
+            currentGallery[targetIndex] = downloadUrl;
+            const newCover = prev.image === oldUrl ? downloadUrl : prev.image;
+
+            return {
+              ...prev,
+              galleryImages: currentGallery,
+              image: newCover,
+            };
+          });
+          setUploadSuccess(true);
+        } else {
+          setUploadError('Failed to upload re-cropped image.');
+        }
+      } catch (err: any) {
+        console.error('Re-crop upload failed:', err);
+        setUploadError('Failed to upload re-cropped image.');
+      } finally {
+        setIsUploadingImage(false);
+        setUploadProgressText('');
+      }
+      return;
+    }
+
+    // TARGET 3: Product Gallery (Upload all cropped files in batch)
     try {
       setIsUploadingImage(true);
       setUploadError('');
@@ -549,9 +728,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
 
       const uploadedUrls: string[] = [];
 
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i];
-        setUploadProgressText(`Uploading ${i + 1} of ${validFiles.length}...`);
+      for (let i = 0; i < croppedFiles.length; i++) {
+        const file = croppedFiles[i];
+        setUploadProgressText(`Uploading cropped image ${i + 1} of ${croppedFiles.length}...`);
 
         let downloadUrl = '';
         try {
@@ -560,7 +739,6 @@ If you need any assistance with your shipment, feel free to reply directly to th
           console.warn('Supabase storage attempt notice, trying secondary:', storageErr);
         }
 
-        // Fallback to Firebase Storage if needed
         if (!downloadUrl) {
           downloadUrl = await uploadProductImageToStorage(file);
         }
@@ -586,17 +764,14 @@ If you need any assistance with your shipment, feel free to reply directly to th
         });
         setUploadSuccess(true);
       } else {
-        setUploadError('Failed to upload images. Please check network/storage.');
+        setUploadError('Failed to upload cropped images. Please check network/storage.');
       }
     } catch (err: any) {
-      console.error('Image upload failed:', err);
+      console.error('Cropped image upload failed:', err);
       setUploadError('Failed to upload image(s). Please try again.');
     } finally {
       setIsUploadingImage(false);
       setUploadProgressText('');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -958,41 +1133,6 @@ If you need any assistance with your shipment, feel free to reply directly to th
     setIsEditCategoryModalOpen(true);
   };
 
-  const handleCategoryCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setCategoryUploadError('Please select a valid image file (PNG, JPG, WEBP).');
-      return;
-    }
-
-    try {
-      setIsUploadingCategoryCover(true);
-      setCategoryUploadError('');
-      setCategoryUploadSuccess(false);
-
-      let downloadUrl = '';
-      try {
-        downloadUrl = await uploadImageToSupabase(file, 'products');
-      } catch (e) {
-        console.warn('Supabase storage upload notice:', e);
-      }
-
-      if (!downloadUrl) {
-        downloadUrl = await uploadProductImageToStorage(file);
-      }
-
-      setCategoryFormData(prev => ({ ...prev, image: downloadUrl }));
-      setCategoryUploadSuccess(true);
-    } catch (err: any) {
-      console.error('Category cover upload error:', err);
-      setCategoryUploadError(err.message || 'Failed to upload cover image. Please try again.');
-    } finally {
-      setIsUploadingCategoryCover(false);
-    }
-  };
-
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!categoryFormData.name.trim()) {
@@ -1237,39 +1377,28 @@ If you need any assistance with your shipment, feel free to reply directly to th
   }, [orders]);
 
   // Helper for Order Status Badges
-  const getStatusBadge = (status: OrderStatus) => {
-    switch (status) {
-      case 'pending':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="w-3 h-3 text-amber-600" /> Pending
-          </span>
-        );
-      case 'confirmed':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-            <CheckCircle2 className="w-3 h-3 text-blue-600" /> Confirmed
-          </span>
-        );
-      case 'shipped':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
-            <Truck className="w-3 h-3 text-purple-600" /> Shipped
-          </span>
-        );
-      case 'delivered':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCheck className="w-3 h-3 text-emerald-600" /> Delivered
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-zinc-100 text-zinc-700 border border-zinc-200">
-            {status}
-          </span>
-        );
-    }
+  const getStatusBadge = (
+    status: OrderStatus,
+    orderId?: string,
+    orderNumber?: string,
+    interactive: boolean = false,
+    size: 'sm' | 'md' | 'lg' = 'md'
+  ) => {
+    return (
+      <OrderStatusChip
+        status={status}
+        orderId={orderId}
+        orderNumber={orderNumber}
+        isUpdating={orderId ? updatingOrderId === orderId : false}
+        onStatusChange={
+          interactive && orderId
+            ? (newStatus) => handleStatusChange(orderId, newStatus, orderNumber)
+            : undefined
+        }
+        size={size}
+        interactive={interactive}
+      />
+    );
   };
 
   return (
@@ -1279,12 +1408,10 @@ If you need any assistance with your shipment, feel free to reply directly to th
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-zinc-200 px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center font-black text-white font-mono shadow-md shadow-red-600/20">
-              RG
-            </div>
-            <div>
+            <RedlineLogo variant="full" theme="light" />
+            <div className="hidden sm:block pl-2 border-l border-zinc-200">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold uppercase tracking-widest text-red-600">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
                   ADMIN CONSOLE
                 </span>
                 <span className="bg-zinc-100 border border-zinc-200 text-zinc-600 text-[10px] px-2 py-0.5 rounded-full font-mono">
@@ -1292,12 +1419,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 </span>
                 <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Supabase: Connected
+                  Supabase Connected
                 </span>
               </div>
-              <h1 className="text-lg font-black uppercase italic tracking-tight font-sans text-zinc-900">
-                Redline <span className="text-red-600">Garage</span> Dashboard
-              </h1>
             </div>
           </div>
         </div>
@@ -1461,9 +1585,12 @@ If you need any assistance with your shipment, feel free to reply directly to th
       {/* Content Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-32 space-y-4 font-mono text-zinc-500">
-            <RefreshCw className="w-8 h-8 animate-spin text-red-600" />
-            <p className="text-xs uppercase tracking-wider">Syncing Redline Garage Firestore Database...</p>
+          <div className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-xs">
+            <BrandedLoadingScreen
+              fullScreen={false}
+              message="Syncing Redline Garage Database..."
+              submessage="Pulling latest orders, products, inventory valuations & Supabase sync"
+            />
           </div>
         ) : (
           <>
@@ -1829,22 +1956,15 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                 ₹{Number(o.total || 0).toFixed(2)}
                               </td>
                               <td className="py-3 px-3">
-                                <div className="flex items-center gap-2">
-                                  <select
-                                    value={o.status}
-                                    disabled={updatingOrderId === o.id}
-                                    onChange={(e) => handleStatusChange(o.id!, e.target.value as OrderStatus, o.orderNumber)}
-                                    className="bg-zinc-50 border border-zinc-200 text-zinc-900 font-mono text-[11px] rounded-lg px-2 py-1 focus:border-red-600 focus:outline-hidden cursor-pointer disabled:opacity-50"
-                                  >
-                                    <option value="pending">Pending</option>
-                                    <option value="confirmed">Confirmed</option>
-                                    <option value="shipped">Shipped</option>
-                                    <option value="delivered">Delivered</option>
-                                  </select>
-                                  {updatingOrderId === o.id && (
-                                    <Loader2 className="w-3 h-3 animate-spin text-red-600" />
-                                  )}
-                                </div>
+                                <OrderStatusChip
+                                  status={o.status}
+                                  orderId={o.id}
+                                  orderNumber={o.orderNumber}
+                                  isUpdating={updatingOrderId === o.id}
+                                  onStatusChange={(newStatus) => handleStatusChange(o.id!, newStatus, o.orderNumber)}
+                                  size="sm"
+                                  interactive={true}
+                                />
                               </td>
                             </tr>
                           ))}
@@ -2487,7 +2607,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                 <td className="py-4 px-4 align-top">
                                   <div className="space-y-2">
                                     <div className="flex items-center justify-between gap-1">
-                                      <div>{getStatusBadge(order.status)}</div>
+                                      <div>{getStatusBadge(order.status, order.id, order.orderNumber, true, 'md')}</div>
                                       {updatingOrderId === order.id && (
                                         <div className="flex items-center gap-1 text-[10px] text-red-600 font-mono animate-pulse">
                                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -2985,6 +3105,18 @@ If you need any assistance with your shipment, feel free to reply directly to th
                               <Trash2 className="w-3 h-3" />
                             </button>
 
+                            {/* Crop / Re-Crop Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleReCropGalleryImage(idx, imgUrl)}
+                              disabled={isPreparingReCrop || isUploadingImage}
+                              title="Re-Crop & Adjust Framing"
+                              className="absolute bottom-1.5 left-1.5 opacity-90 group-hover:opacity-100 bg-black/75 hover:bg-amber-600 text-white text-[9px] font-bold font-mono px-1.5 py-0.5 rounded transition cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                              <Crop className="w-2.5 h-2.5 text-amber-300" />
+                              <span>Crop</span>
+                            </button>
+
                             {/* Image Index Number */}
                             <div className="absolute bottom-1 right-1.5 text-[8px] font-mono text-white/90 bg-black/60 px-1 rounded">
                               #{idx + 1}
@@ -3184,14 +3316,26 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 <div className="bg-zinc-50 border border-dashed border-zinc-300 hover:border-red-500 rounded-xl p-4 transition-colors">
                   <div className="flex flex-col sm:flex-row items-center gap-4">
                     {/* Visual Image Preview */}
-                    <div className="w-24 h-24 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 relative flex items-center justify-center">
+                    <div className="w-24 h-24 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 relative flex items-center justify-center group">
                       {categoryFormData.image ? (
-                        <img
-                          src={categoryFormData.image}
-                          alt="Cover Preview"
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          <img
+                            src={categoryFormData.image}
+                            alt="Cover Preview"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleReCropCategoryCover}
+                            disabled={isPreparingReCrop || isUploadingCategoryCover}
+                            title="Re-Crop Cover Banner"
+                            className="absolute bottom-1.5 right-1.5 bg-black/80 hover:bg-amber-600 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 rounded transition cursor-pointer flex items-center gap-1 opacity-90 group-hover:opacity-100 shadow-xs"
+                          >
+                            <Crop className="w-2.5 h-2.5 text-amber-300" />
+                            <span>Crop</span>
+                          </button>
+                        </>
                       ) : (
                         <ImageIcon className="w-8 h-8 text-zinc-400" />
                       )}
@@ -3504,6 +3648,22 @@ If you need any assistance with your shipment, feel free to reply directly to th
           onClose={() => setSelectedInvoiceOrder(null)}
         />
       )}
+
+      {/* ========================================================= */}
+      {/* UNIVERSAL ADMIN IMAGE CROPPER MODAL */}
+      {/* ========================================================= */}
+      <ImageCropperModal
+        isOpen={cropModalOpen}
+        files={pendingCropFiles}
+        defaultAspectRatio={cropDefaultRatio}
+        title={cropModalTitle}
+        subtitle={cropModalSubtitle}
+        onClose={() => {
+          setCropModalOpen(false);
+          setPendingCropFiles([]);
+        }}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   );
 };

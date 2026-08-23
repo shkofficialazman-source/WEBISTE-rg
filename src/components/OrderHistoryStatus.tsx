@@ -26,6 +26,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { InvoiceModal } from './InvoiceModal';
+import { OrderStatusChip } from './admin/OrderStatusChip';
 
 interface OrderHistoryStatusProps {
   orders?: FirestoreOrder[];
@@ -156,32 +157,10 @@ export const OrderHistoryStatus: React.FC<OrderHistoryStatusProps> = ({
   });
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return (
-          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
-            <CheckCircle2 className="w-3 h-3 text-blue-600" /> Confirmed
-          </span>
-        );
-      case 'shipped':
-        return (
-          <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase animate-pulse">
-            <Truck className="w-3 h-3 text-purple-600" /> In Transit
-          </span>
-        );
-      case 'delivered':
-        return (
-          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
-            <CheckCheck className="w-3 h-3 text-emerald-600" /> Delivered
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
-            <Clock className="w-3 h-3 text-amber-600" /> Pending
-          </span>
-        );
-    }
+    const validStatus = (['pending', 'confirmed', 'shipped', 'delivered'].includes(status)
+      ? status
+      : 'pending') as any;
+    return <OrderStatusChip status={validStatus} size="sm" />;
   };
 
   const getProgressStepIndex = (status: string) => {

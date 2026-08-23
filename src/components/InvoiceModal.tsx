@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { FirestoreOrder, OrderItem } from '../types';
 import { X, Printer, Download, Share2, ShieldCheck, CheckCircle2, IndianRupee, Truck, Calendar, Sparkles } from 'lucide-react';
+import { RedlineLogo } from './RedlineLogo';
 
 interface InvoiceModalProps {
   order: FirestoreOrder;
@@ -105,19 +106,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
           {/* Header & Logo */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-2 border-zinc-900 pb-6">
             <div>
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white font-black italic text-xl shadow-md">
-                  RG
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-zinc-900 font-mono">
-                    REDLINE GARAGE
-                  </h1>
-                  <p className="text-xs text-zinc-500 font-mono">
-                    Official Die-Cast & Collector Gift Studio India
-                  </p>
-                </div>
-              </div>
+              <RedlineLogo variant="full" theme="light" />
+              <p className="text-xs text-zinc-500 font-mono mt-1">
+                Official Die-Cast &amp; Collector Gift Studio India
+              </p>
             </div>
 
             <div className="text-left sm:text-right font-mono text-xs space-y-0.5">

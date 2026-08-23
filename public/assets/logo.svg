@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" width="420" height="100" fill="none">
+  <defs>
+    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dynamic Supercar Silhouette on Left -->
+  <g transform="translate(10, 8)">
+    <!-- Speed streaks -->
+    <path d="M 0 54 L 38 54" stroke="#dc2626" stroke-width="3" stroke-linecap="round" />
+    <path d="M 10 44 L 54 44" stroke="#71717a" stroke-width="2" stroke-linecap="round" opacity="0.6" />
+    <path d="M 5 66 L 46 66" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M 0 76 L 140 76" stroke="#dc2626" stroke-width="4" stroke-linecap="round" />
+    <path d="M 12 82 L 65 82" stroke="#dc2626" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+
+    <!-- Supercar Aero Body Line -->
+    <path
+      d="M 22 70 Q 35 66 52 60 L 80 34 Q 96 18 116 18 L 126 20 Q 138 24 146 38 L 150 52 Q 151 60 144 64 L 132 66"
+      stroke="#ffffff"
+      stroke-width="3.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Cabin Glass -->
+    <path
+      d="M 81 36 L 114 24 Q 120 24 127 30 L 134 44 L 83 44 Z"
+      fill="#dc2626"
+      fill-opacity="0.25"
+      stroke="#ffffff"
+      stroke-width="2.5"
+      stroke-linejoin="round"
+    />
+
+    <!-- Headlight Wedge -->
+    <polygon points="140,46 150,51 144,55" fill="#dc2626" />
+
+    <!-- Rear Spoiler Line -->
+    <path d="M 18 60 L 26 52 L 40 54" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  <!-- Typography on Right -->
+  <g transform="translate(175, 12)">
+    <!-- REDLINE in Racing Red -->
+    <text
+      x="0"
+      y="42"
+      font-family="'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      font-weight="900"
+      font-style="italic"
+      font-size="44"
+      letter-spacing="-1.5"
+      fill="#dc2626"
+    >REDLINE</text>
+
+    <!-- GARAGE in Crisp White -->
+    <text
+      x="0"
+      y="72"
+      font-family="'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      font-weight="900"
+      font-style="italic"
+      font-size="28"
+      letter-spacing="5"
+      fill="#ffffff"
+    >GARAGE</text>
+
+    <!-- Subtitle -->
+    <text
+      x="2"
+      y="88"
+      font-family="'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      font-weight="700"
+      font-size="9"
+      letter-spacing="3"
+      fill="#a1a1aa"
+    >DIE-CAST &amp; GIFTS INDIA</text>
+  </g>
+</svg>

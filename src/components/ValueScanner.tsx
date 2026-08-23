@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Sparkles, AlertCircle, RefreshCw, CheckCircle2, MessageCircle, HelpCircle, ShieldCheck, Tag, Info, ArrowRight, Flame } from 'lucide-react';
+import { Camera, Upload, Sparkles, AlertCircle, RefreshCw, CheckCircle2, MessageCircle, HelpCircle, ShieldCheck, Tag, Info, ArrowRight, Flame, WifiOff, Clock, Server, AlertTriangle, Cpu } from 'lucide-react';
 
 interface ScanResultData {
   isHotWheelsOrDiecast: boolean;
@@ -13,6 +13,15 @@ interface ScanResultData {
   collectorTip: string;
   confidenceLevel: string;
 }
+
+export type ScannerErrorType =
+  | 'network_timeout'
+  | 'quota_exceeded'
+  | 'service_busy'
+  | 'internal_api_error'
+  | 'invalid_input'
+  | 'unrecognized_car'
+  | 'general';
 
 /**
  * Resizes and compresses image on client side using HTML5 Canvas to max 1024px, JPEG quality 0.82
@@ -141,13 +150,16 @@ export const ValueScanner: React.FC = () => {
   const [scanningStatus, setScanningStatus] = useState<string>('Analyzing... this may take a moment');
   const [scanResult, setScanResult] = useState<ScanResultData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<'service_busy' | 'unrecognized_car' | 'general' | null>(null);
+  const [errorType, setErrorType] = useState<ScannerErrorType | null>(null);
+  const [rawDiagnosticError, setRawDiagnosticError] = useState<string | null>(null);
+  const [showDiagnosticTrace, setShowDiagnosticTrace] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
+      console.warn('[ValueScanner] Invalid file uploaded:', { fileName: file.name, type: file.type });
       setErrorMessage('Please upload a valid image file (JPG, PNG, WEBP).');
-      setErrorType('general');
+      setErrorType('invalid_input');
       return;
     }
 
@@ -162,7 +174,7 @@ export const ValueScanner: React.FC = () => {
       setSelectedImage(compressedBase64);
       triggerScan(compressedBase64);
     } catch (err) {
-      console.warn('Compression notice, falling back to direct upload:', err);
+      console.warn('[ValueScanner] Compression notice, falling back to direct upload:', err);
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
@@ -203,7 +215,16 @@ export const ValueScanner: React.FC = () => {
     setIsScanning(true);
     setErrorMessage(null);
     setErrorType(null);
+    setRawDiagnosticError(null);
+    setShowDiagnosticTrace(false);
     setScanningStatus('Analyzing... this may take a moment');
+
+    console.log('[ValueScanner Client Request]:', {
+      timestamp: new Date().toISOString(),
+      payloadLength: imageBase64.length,
+      isBase64DataUrl: imageBase64.startsWith('data:image/'),
+      targetEndpoint: '/api/gemini/scan-hotwheels',
+    });
 
     // Dynamic friendly status updates if server takes a moment
     const statusTimer1 = setTimeout(() => {
@@ -231,58 +252,132 @@ export const ValueScanner: React.FC = () => {
 
       clearTimeout(timeoutId);
 
+      // Extract raw response text first for full diagnostic transparency
       let data: any = null;
+      let rawText = '';
       try {
-        const text = await response.text();
-        data = JSON.parse(text);
+        rawText = await response.text();
+        data = JSON.parse(rawText);
       } catch (jsonErr) {
-        if (fallbackSampleData) {
-          setScanResult(fallbackSampleData);
-          setErrorMessage(null);
-          return;
-        }
-        const isUnavailable = response.status === 503 || response.status === 502;
-        setErrorType(isUnavailable ? 'service_busy' : 'general');
-        throw new Error(
-          isUnavailable
-            ? 'The AI scanner is temporarily busy with high request traffic. Please click "Retry Scan Now" in a few seconds.'
-            : 'Connection was temporarily interrupted. Please try again.'
-        );
+        console.error('[ValueScanner Non-JSON Raw API Response Received]:', {
+          httpStatus: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          rawTextSnippet: rawText.slice(0, 300),
+          jsonErr,
+          timestamp: new Date().toISOString(),
+        });
       }
 
-      if (!response.ok || !data.success) {
+      // CRITICAL REQUIREMENT: Log full response object and error status to console BEFORE any UI messages
+      console.log('[ValueScanner Gemini API Full Response Object]:', {
+        httpStatus: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries()),
+        parsedPayload: data,
+        rawTextLength: rawText.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Handle non-200 or failure payloads with granular error classification
+      if (!response.ok || !data?.success) {
+        let resolvedErrorType: ScannerErrorType = 'general';
+        let resolvedErrorMessage = '';
+
+        if (response.status === 504 || data?.errorType === 'network_timeout') {
+          resolvedErrorType = 'network_timeout';
+          resolvedErrorMessage = 'The scan request timed out while communicating with the valuation server. Please tap "Retry Scan Now".';
+        } else if (response.status === 429 || data?.errorType === 'quota_exceeded') {
+          resolvedErrorType = 'quota_exceeded';
+          resolvedErrorMessage = 'Scanner is temporarily at capacity (Gemini API quota limit reached). Shared quota across the AI Pit Crew Chatbot, Card Stylizer, and Scanner has reached rate limit.';
+        } else if (response.status === 503 || response.status === 502 || data?.errorType === 'service_busy') {
+          resolvedErrorType = 'service_busy';
+          resolvedErrorMessage = 'Gemini AI vision services are currently experiencing high traffic. Please tap "Retry Scan Now" in a few seconds.';
+        } else if (response.status === 400 || data?.errorType === 'invalid_input') {
+          resolvedErrorType = 'invalid_input';
+          resolvedErrorMessage = data?.error || 'Uploaded image could not be processed. Please try another photo.';
+        } else if (response.status === 500 || data?.errorType === 'internal_api_error') {
+          resolvedErrorType = 'internal_api_error';
+          resolvedErrorMessage = data?.error || 'Internal AI engine error occurred while appraising this car.';
+        } else {
+          resolvedErrorType = data?.errorType || 'general';
+          resolvedErrorMessage = data?.error || `API returned status ${response.status} (${response.statusText || 'Error'}).`;
+        }
+
+        // Log full error details to console BEFORE UI state update
+        console.error('[ValueScanner Gemini API Error Status & Object]:', {
+          httpStatus: response.status,
+          statusText: response.statusText,
+          errorType: resolvedErrorType,
+          errorMessage: resolvedErrorMessage,
+          rawError: data?.rawError || rawText,
+          isApiKeyConfigured: data?.isApiKeyConfigured,
+          apiKeySource: data?.apiKeySource,
+          elapsedMs: data?.elapsedMs,
+          timestamp: new Date().toISOString(),
+        });
+
         if (fallbackSampleData) {
           setScanResult(fallbackSampleData);
           setErrorMessage(null);
           return;
         }
-        const type = data.errorType || (response.status === 503 ? 'service_busy' : 'general');
-        setErrorType(type);
-        throw new Error(data.error || 'Could not analyze the car photo. Please try a clearer picture.');
+
+        setErrorType(resolvedErrorType);
+        setRawDiagnosticError(
+          data?.rawError
+            ? `[HTTP ${response.status}] ${data.rawError}`
+            : `HTTP ${response.status} ${response.statusText}: ${rawText.slice(0, 180)}`
+        );
+        throw new Error(resolvedErrorMessage);
       }
+
+      // Success
+      console.log('[ValueScanner Gemini API Scan Succeeded]:', {
+        modelUsed: data.modelUsed,
+        isAiLive: data.isAiLive,
+        isApiKeyConfigured: data.isApiKeyConfigured,
+        apiKeySource: data.apiKeySource,
+        elapsedMs: data.elapsedMs,
+        carIdentified: data.data?.carModelName,
+        timestamp: new Date().toISOString(),
+      });
 
       setScanResult(data.data);
     } catch (err: any) {
-      console.error('Scan error:', err);
+      console.error('[ValueScanner Client Caught Scan Exception]:', {
+        errorName: err.name,
+        message: err.message,
+        isAbort: err.name === 'AbortError',
+        stack: err.stack,
+        timestamp: new Date().toISOString(),
+      });
+
       if (fallbackSampleData) {
         setScanResult(fallbackSampleData);
         setErrorMessage(null);
         return;
       }
+
       let msg = err.message || 'Failed to scan image. Please try again with a brighter, centered photo.';
-      if (err.name === 'AbortError') {
+      let type: ScannerErrorType = 'general';
+
+      if (err.name === 'AbortError' || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout')) {
+        type = 'network_timeout';
         msg = 'Scan request timed out. Please tap "Retry Scan Now" to retry.';
+      } else if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('429') || msg.toLowerCase().includes('capacity')) {
+        type = 'quota_exceeded';
+      } else if (msg.toLowerCase().includes('busy') || msg.toLowerCase().includes('503') || msg.toLowerCase().includes('high traffic') || msg.toLowerCase().includes('demand')) {
+        type = 'service_busy';
+      } else if (msg.toLowerCase().includes('internal') || msg.toLowerCase().includes('500') || msg.toLowerCase().includes('engine error')) {
+        type = 'internal_api_error';
+      } else if (msg.toLowerCase().includes('identify') || msg.toLowerCase().includes('recognize') || msg.toLowerCase().includes('blurry')) {
+        type = 'unrecognized_car';
       }
+
+      setErrorType(type);
       setErrorMessage(msg);
-      if (!errorType) {
-        if (msg.toLowerCase().includes('busy') || msg.toLowerCase().includes('503') || msg.toLowerCase().includes('demand')) {
-          setErrorType('service_busy');
-        } else if (msg.toLowerCase().includes('identify') || msg.toLowerCase().includes('recognize') || msg.toLowerCase().includes('hot wheels')) {
-          setErrorType('unrecognized_car');
-        } else {
-          setErrorType('general');
-        }
-      }
     } finally {
       clearTimeout(timeoutId);
       clearTimeout(statusTimer1);
@@ -448,20 +543,44 @@ export const ValueScanner: React.FC = () => {
                   </div>
                 </div>
               ) : errorMessage ? (
-                /* Differentiated Error State */
+                /* Granular Differentiated Error State */
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-center space-y-4 max-w-lg mx-auto shadow-xl">
                   <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center ${
-                    errorType === 'service_busy'
+                    errorType === 'network_timeout'
                       ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                      : errorType === 'quota_exceeded'
+                      ? 'bg-orange-500/10 border border-orange-500/30 text-orange-400'
+                      : errorType === 'service_busy'
+                      ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                      : errorType === 'internal_api_error'
+                      ? 'bg-red-500/10 border border-red-500/30 text-red-400'
                       : 'bg-red-500/10 border border-red-500/30 text-red-400'
                   }`}>
-                    <AlertCircle className="w-7 h-7" />
+                    {errorType === 'network_timeout' ? (
+                      <WifiOff className="w-7 h-7" />
+                    ) : errorType === 'quota_exceeded' ? (
+                      <AlertTriangle className="w-7 h-7" />
+                    ) : errorType === 'service_busy' ? (
+                      <Clock className="w-7 h-7" />
+                    ) : errorType === 'internal_api_error' ? (
+                      <Server className="w-7 h-7" />
+                    ) : (
+                      <AlertCircle className="w-7 h-7" />
+                    )}
                   </div>
                   
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-bold text-white uppercase font-sans tracking-tight">
-                      {errorType === 'service_busy'
-                        ? 'Scanner In High Demand'
+                      {errorType === 'network_timeout'
+                        ? 'Network Request Timed Out'
+                        : errorType === 'quota_exceeded'
+                        ? 'Gemini API Quota Limit Reached'
+                        : errorType === 'service_busy'
+                        ? 'AI Vision Servers In High Demand'
+                        : errorType === 'internal_api_error'
+                        ? 'Internal AI Engine Error'
+                        : errorType === 'invalid_input'
+                        ? 'Invalid Image Format'
                         : errorType === 'unrecognized_car'
                         ? 'Hot Wheels Model Unclear'
                         : 'Scan Inconclusive'}
@@ -470,6 +589,43 @@ export const ValueScanner: React.FC = () => {
                       {errorMessage}
                     </p>
                   </div>
+
+                  {/* Technical Diagnostic Trace Inspector */}
+                  {rawDiagnosticError && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowDiagnosticTrace(!showDiagnosticTrace)}
+                        className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 underline transition cursor-pointer"
+                      >
+                        {showDiagnosticTrace ? 'Hide Technical Diagnostic Trace' : 'View Technical Diagnostic Trace'}
+                      </button>
+                      {showDiagnosticTrace && (
+                        <div className="mt-2 bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-left font-mono text-[10px] text-zinc-400 max-h-32 overflow-y-auto space-y-1.5 break-words">
+                          <div className="text-red-400 font-bold uppercase flex items-center justify-between">
+                            <span>Diagnostic Trace Log:</span>
+                            <span className="text-[9px] text-zinc-500">{errorType?.toUpperCase()}</span>
+                          </div>
+                          <div className="text-zinc-300">{rawDiagnosticError}</div>
+                          <div className="text-zinc-500 pt-1 border-t border-zinc-900">
+                            Hostinger Production Notice: If deploying on Hostinger, ensure <span className="text-zinc-300 font-bold">GEMINI_API_KEY</span> is set in Hostinger hPanel → Node.js App → Environment Variables, or via a root <span className="text-zinc-300 font-bold">.env</span> file.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {errorType === 'quota_exceeded' && (
+                    <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-3 text-left text-xs font-mono text-amber-300/90 space-y-1">
+                      <div className="font-bold text-[11px] uppercase flex items-center gap-1">
+                        <Cpu className="w-3.5 h-3.5" />
+                        <span>Shared Gemini API Quota Notice:</span>
+                      </div>
+                      <div className="text-[11px] text-amber-200/80">
+                        The AI Chatbot, Blister Card Stylizer, and Value Scanner share requests per minute (RPM). Please pause for a few seconds before retrying.
+                      </div>
+                    </div>
+                  )}
 
                   {errorType === 'unrecognized_car' && (
                     <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3.5 text-left text-xs font-mono text-zinc-400 space-y-1">
@@ -481,10 +637,10 @@ export const ValueScanner: React.FC = () => {
                   )}
 
                   <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    {errorType === 'service_busy' && (
+                    {(errorType === 'service_busy' || errorType === 'quota_exceeded' || errorType === 'network_timeout' || errorType === 'internal_api_error') && (
                       <button
                         onClick={handleRetryCurrentPhoto}
-                        className="bg-amber-600 hover:bg-amber-500 text-black font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] flex items-center gap-2"
+                        className="bg-amber-600 hover:bg-amber-500 text-black font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] flex items-center gap-2 shadow-lg shadow-amber-600/20"
                       >
                         <RefreshCw className="w-4 h-4" />
                         <span>Retry Scan Now</span>
@@ -495,6 +651,44 @@ export const ValueScanner: React.FC = () => {
                       className="bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold uppercase px-5 py-3 rounded-xl transition cursor-pointer min-h-[44px] border border-zinc-700"
                     >
                       Try Another Photo
+                    </button>
+                  </div>
+                </div>
+              ) : scanResult && !scanResult.isHotWheelsOrDiecast ? (
+                /* Unrecognized / Non-Diecast Guidance Screen */
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-center space-y-5 max-w-lg mx-auto shadow-xl animate-fade-in">
+                  <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                    <HelpCircle className="w-7 h-7" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white uppercase font-sans tracking-tight">
+                      Die-Cast Vehicle Not Detected
+                    </h3>
+                    <p className="text-xs text-zinc-300 font-mono leading-relaxed">
+                      {scanResult.valueExplanation || 'Our AI vision model could not clearly identify a Hot Wheels or die-cast car in this image.'}
+                    </p>
+                  </div>
+
+                  {/* Photo tips box */}
+                  <div className="bg-zinc-950/90 border border-zinc-800 rounded-xl p-4 text-left text-xs font-mono text-zinc-400 space-y-2">
+                    <div className="text-zinc-200 font-bold text-xs uppercase flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-red-400" />
+                      <span>Tips for an accurate appraisal:</span>
+                    </div>
+                    <ul className="space-y-1 pl-1 text-[11px] text-zinc-400">
+                      <li>• Take a bright, well-lit photo of your Hot Wheels blister card or loose car.</li>
+                      <li>• Keep the car or packaging centered and in sharp focus.</li>
+                      <li>• Avoid heavy flash glare or reflective plastic reflections over the tampos.</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button
+                      onClick={handleReset}
+                      className="bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] shadow-lg shadow-red-600/20"
+                    >
+                      Scan Another Photo
                     </button>
                   </div>
                 </div>

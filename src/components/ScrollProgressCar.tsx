@@ -1,20 +1,51 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Car } from 'lucide-react';
 
 export const ScrollProgressCar: React.FC = () => {
   const [scrollProgress, setScrollProgress] = useState(0);
+  const totalHeightRef = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight > 0) {
-        const currentProgress = (window.scrollY / totalHeight) * 100;
-        setScrollProgress(Math.min(100, Math.max(0, currentProgress)));
-      }
+    // 1. Compute and cache document scrollable height on mount & window resize (debounced)
+    const updateDimensions = () => {
+      totalHeightRef.current = Math.max(
+        1,
+        (document.documentElement.scrollHeight || document.body.scrollHeight || 0) - window.innerHeight
+      );
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    updateDimensions();
+
+    // 2. Non-blocking passive scroll listener with requestAnimationFrame batching
+    const handleScroll = () => {
+      if (rafIdRef.current !== null) return;
+
+      rafIdRef.current = window.requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        const totalHeight = totalHeightRef.current;
+        if (totalHeight > 0) {
+          const currentY = window.pageYOffset || document.documentElement.scrollTop || 0;
+          const currentProgress = (currentY / totalHeight) * 100;
+          setScrollProgress(Math.min(100, Math.max(0, currentProgress)));
+        }
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', updateDimensions, { passive: true });
+
+    // Periodic check for dynamic content expansion (after database load)
+    const timeoutId = setTimeout(updateDimensions, 1200);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updateDimensions);
+      clearTimeout(timeoutId);
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+      }
+    };
   }, []);
 
   return (

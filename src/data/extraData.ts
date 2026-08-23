@@ -3,39 +3,45 @@ import { FAQItem, GalleryItem, Testimonial } from '../types';
 export const FAQS: FAQItem[] = [
   {
     id: 'faq-1',
-    question: 'How fast do you ship Redline Garage items?',
-    answer: 'Standard items (Bouquets, Frames, Scale Sets) ship within 24-48 hours. Custom Photo Cards take 2-3 business days to allow for photo proofing and high-DPI cardstock printing. Express priority shipping options are available at checkout.',
-    category: 'delivery'
-  },
-  {
-    id: 'faq-2',
-    question: 'How do I upload my photo for Customized Hot Wheels Cards?',
-    answer: 'You can upload your photo directly on our website using the "Custom Card Builder" or during checkout. Alternatively, if you order via WhatsApp, simply send your high-res photo directly to our WhatsApp concierge after placing your order!',
-    category: 'customization'
-  },
-  {
-    id: 'faq-3',
-    question: 'Are the Hot Wheels cars authentic Mattel products?',
-    answer: 'Yes, 100%! We only use official, licensed Mattel Hot Wheels die-cast cars and premium licensed scale models. All cars are genuine, pristine metal castings.',
+    question: 'Are all Hot Wheels and die-cast cars authentic Mattel products?',
+    answer: 'Yes, 100%! We strictly source official, licensed Mattel Hot Wheels mainline cars, Car Culture premiums, and certified scale models. Every casting is brand-new, factory mint, and authentic.',
     category: 'care'
   },
   {
+    id: 'faq-2',
+    question: 'How fast is shipping across India?',
+    answer: 'Standard items (Bouquets, Shadowbox Frames, Scale Model Sets) ship within 24-48 hours. Custom Photo Cards take 2-3 business days for photo proofing and high-resolution cardstock printing. We deliver nationwide across India (Bangalore, Mumbai, Delhi, Hyderabad, Chennai, Mangalore and all PIN codes) within 2-5 business days via BlueDart, DTDC, and Delhivery with live tracking.',
+    category: 'delivery'
+  },
+  {
+    id: 'faq-3',
+    question: 'What payment options and Cash on Delivery (COD) do you accept?',
+    answer: 'We accept all major payment methods including UPI (GPay, PhonePe, Paytm), Credit/Debit Cards, Net Banking, and Cash on Delivery (COD). COD is supported on all standard bouquets, frames, and scale model sets. For customized photo blister cards, a small nominal booking deposit is required prior to printing.',
+    category: 'payment'
+  },
+  {
     id: 'faq-4',
-    question: 'Can I choose specific Hot Wheels model cars for my bouquet or frame?',
-    answer: 'Absolutely! You can choose themes (JDM Icons, European Supercars, American Muscle, Retro Classics) or message us on WhatsApp with specific casting requests. We maintain an inventory of over 1,000+ sealed Hot Wheels cars.',
+    question: 'How do I customize a Hot Wheels Blister Card with my photo?',
+    answer: 'You can design your personalized card directly using our online "Custom Card Builder" or upload during checkout. You can also send your high-resolution photo and custom driver name directly to our WhatsApp concierge (+91-8431294886). We print on premium 350 GSM glossy cardstock and mount the car inside a crystal-clear factory blister bubble.',
     category: 'customization'
   },
   {
     id: 'faq-5',
-    question: 'What payment options and COD options do you support?',
-    answer: 'We accept Credit/Debit Cards, Apple Pay, Google Pay, and UPI. Cash on Delivery (COD) is available for all standard non-customized bouquets, frames, and scale model sets. For customized photo cards, a small partial deposit is required prior to printing.',
-    category: 'payment'
+    question: 'Can I choose specific Hot Wheels car castings or themes for my bouquet or frame?',
+    answer: 'Absolutely! You can choose themes (JDM Icons, European Supercars, American Muscle, Vintage Classics, Fast & Furious) or message us on WhatsApp with specific casting requests. We maintain an inventory of over 1,000+ sealed Hot Wheels cars.',
+    category: 'customization'
   },
   {
     id: 'faq-6',
-    question: 'How are bouquets and frames packed to avoid damage in transit?',
-    answer: 'Every piece is packed inside a heavy-duty reinforced corrugated box with form-fitted bubble cushioning and a clear protective sleeve. Frames come with corner edge guards and shatter-proof acrylic faces.',
+    question: 'Where is Redline Garage based, and do you offer safe transit packaging?',
+    answer: 'Redline Garage is based in Mangalore, Karnataka. Every order is packed inside a heavy-duty 5-ply reinforced corrugated box with form-fitted bubble cushioning and moisture barrier wraps. Wall frames include corner edge guards and shatterproof acrylic protection to guarantee 100% damage-free doorstep arrival.',
     category: 'delivery'
+  },
+  {
+    id: 'faq-7',
+    question: 'How does the free AI Hot Wheels Value Scanner work?',
+    answer: 'Our AI Value Scanner uses Google Gemini vision models to analyze photos of any carded or loose die-cast car. It identifies the casting model, series release year, rarity tier, and provides an estimated secondary market collector valuation in Indian Rupees (INR) with collector tips.',
+    category: 'care'
   }
 ];
 

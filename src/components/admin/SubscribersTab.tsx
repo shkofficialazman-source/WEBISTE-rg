@@ -27,6 +27,7 @@ import {
   Clock,
   Filter,
 } from 'lucide-react';
+import { RedlineLogo } from '../RedlineLogo';
 
 export const SubscribersTab: React.FC = () => {
   const [subscribers, setSubscribers] = useState<NewsletterSubscriber[]>([]);
@@ -539,14 +540,18 @@ export const SubscribersTab: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 font-mono">
           <div className="bg-white border border-zinc-200 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Send className="w-4 h-4 text-red-600" />
-                <h3 className="font-extrabold text-sm text-zinc-900 uppercase">Marketing Campaign Broadcast</h3>
+              <div className="flex items-center gap-3">
+                <RedlineLogo variant="full" theme="light" />
+                <span className="text-zinc-300">|</span>
+                <div className="flex items-center gap-1.5 text-xs text-red-600 font-bold uppercase">
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Broadcast</span>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCampaignModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                className="text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer p-1"
               >
                 ✕
               </button>

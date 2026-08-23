@@ -10,17 +10,18 @@ import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
 import { ProductCatalog } from './components/ProductCatalog';
-import { ValueScanner } from './components/ValueScanner';
 import { WhyRedline } from './components/WhyRedline';
-import { TestimonialsSection } from './components/TestimonialsSection';
-import { CollectorSpotlightSection } from './components/CollectorSpotlightSection';
-import { BirthdayCelebrationModal } from './components/BirthdayCelebrationModal';
-import { OrderAndContactSection } from './components/OrderAndContactSection';
-import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { BrandedLoadingScreen } from './components/BrandedLoadingScreen';
 
-// Code-split heavy modals, drawers, chatbot and admin portals for fast mobile loading
+// Code-split heavy interactive components, modals, drawers, chatbot and admin portals for lightning initial load
+const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
+const CollectorSpotlightSection = React.lazy(() => import('./components/CollectorSpotlightSection').then(m => ({ default: m.CollectorSpotlightSection })));
+const TestimonialsSection = React.lazy(() => import('./components/TestimonialsSection').then(m => ({ default: m.TestimonialsSection })));
+const OrderAndContactSection = React.lazy(() => import('./components/OrderAndContactSection').then(m => ({ default: m.OrderAndContactSection })));
+const FAQSection = React.lazy(() => import('./components/FAQSection').then(m => ({ default: m.FAQSection })));
+const BirthdayCelebrationModal = React.lazy(() => import('./components/BirthdayCelebrationModal').then(m => ({ default: m.BirthdayCelebrationModal })));
 const CartDrawer = React.lazy(() => import('./components/CartDrawer').then(m => ({ default: m.CartDrawer })));
 const QuickViewModal = React.lazy(() => import('./components/QuickViewModal').then(m => ({ default: m.QuickViewModal })));
 const CustomerOrdersModal = React.lazy(() => import('./components/CustomerOrdersModal').then(m => ({ default: m.CustomerOrdersModal })));
@@ -173,27 +174,81 @@ export default function App() {
     };
   }, [currentRoute]);
 
+  // Deep-link product & category query parameters on initial load & popstate
+  useEffect(() => {
+    if (productsList.length === 0) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const productIdParam = urlParams.get('product');
+    const categoryParam = urlParams.get('category');
+
+    if (productIdParam) {
+      const found = productsList.find(p => p.id === productIdParam || p.id.toLowerCase() === productIdParam.toLowerCase());
+      if (found && (!quickViewProduct || quickViewProduct.id !== found.id)) {
+        setQuickViewProduct(found);
+      }
+    }
+
+    if (categoryParam) {
+      setSelectedCategory(categoryParam);
+    }
+  }, [productsList]);
+
+  // Handle QuickView product modal state & URL synchronization
+  const handleOpenQuickView = (product: Product) => {
+    setQuickViewProduct(product);
+    try {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('product', product.id);
+      window.history.pushState({ productId: product.id }, '', newUrl.toString());
+    } catch (err) {
+      console.warn('URL sync note:', err);
+    }
+  };
+
+  const handleCloseQuickView = () => {
+    setQuickViewProduct(null);
+    try {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('product');
+      window.history.pushState({}, '', newUrl.toString());
+    } catch (err) {
+      console.warn('URL sync note:', err);
+    }
+  };
+
   // Dynamic SEO metadata update for Google, WhatsApp & Social link previews
   useEffect(() => {
     if (quickViewProduct) {
-      updateSEO({ product: quickViewProduct });
+      updateSEO({ 
+        product: quickViewProduct,
+        pageType: 'product',
+        categoryName: quickViewProduct.category,
+      });
     } else if (currentRoute === 'admin' || currentRoute === 'admin-login') {
       updateSEO({
-        title: 'Admin Console | Redline Garage India',
-        description: 'Secure garage manager dashboard for orders, products, inventory, referral codes, and Google Sheets sync.',
+        pageType: 'admin',
       });
     } else if (currentRoute === 'customer-login') {
       updateSEO({
-        title: 'Customer Sign In & Order Tracking | Redline Garage',
-        description: 'Access your past Hot Wheels orders, shipping tracking numbers, and account details on Redline Garage.',
+        pageType: 'login',
+      });
+    } else if (selectedCategory && selectedCategory !== 'all') {
+      updateSEO({
+        pageType: 'shop',
+        title: `Shop Hot Wheels ${selectedCategory.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Online in India | Redline Garage`,
+      });
+    } else if (searchQuery.trim()) {
+      updateSEO({
+        pageType: 'shop',
+        title: `Search: "${searchQuery}" — Hot Wheels Die-Cast Models | Redline Garage`,
       });
     } else {
       updateSEO({
-        title: 'Redline Garage — Buy Hot Wheels, Die-Cast Bouquets & Custom Cards in India',
-        description: "India's premier destination for rare Hot Wheels, custom die-cast bouquets, acrylic collector frames, personalized blister cards, and AI rarity scanner. Fast shipping across India with genuine authentic collectibles.",
+        pageType: 'home',
       });
     }
-  }, [currentRoute, quickViewProduct]);
+  }, [currentRoute, quickViewProduct, selectedCategory, searchQuery]);
 
 
   // Hero flagship & Custom Card products (from live database)
@@ -310,7 +365,7 @@ export default function App() {
   // -------------------------------------------------------------
   if (currentRoute === 'customer-login') {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white font-mono text-xs">Loading login...</div>}>
+      <Suspense fallback={<BrandedLoadingScreen message="Accessing Collector Portal..." submessage="Preparing your garage credentials & orders" />}>
         <CustomerAuth
           onSuccess={(profile) => {
             setCustomerProfile(profile);
@@ -327,7 +382,7 @@ export default function App() {
   // -------------------------------------------------------------
   if (currentRoute === 'admin-login') {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white font-mono text-xs">Loading admin portal...</div>}>
+      <Suspense fallback={<BrandedLoadingScreen message="Opening Admin Portal..." submessage="Verifying authorized owner credentials" />}>
         <AdminLogin
           onLoginSuccess={() => navigateToRoute('admin')}
           onBackToStore={() => navigateToRoute('store')}
@@ -347,7 +402,7 @@ export default function App() {
     }
 
     return (
-      <Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white font-mono text-xs">Loading admin console...</div>}>
+      <Suspense fallback={<BrandedLoadingScreen message="Loading Redline Garage Command Center..." submessage="Syncing products, orders, inventory & Supabase database" />}>
         <AdminDashboard
           onLogout={() => navigateToRoute('store')}
           onBackToStore={() => navigateToRoute('store')}
@@ -384,7 +439,7 @@ export default function App() {
         <HeroSection
           heroProduct={heroProduct}
           products={productsList}
-          onSelectProduct={(p) => setQuickViewProduct(p)}
+          onSelectProduct={(p) => handleOpenQuickView(p)}
           onNavigate={handleNavigate}
         />
       </div>
@@ -398,39 +453,42 @@ export default function App() {
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
         onAddToCart={handleAddToCart}
-        onQuickView={(p) => setQuickViewProduct(p)}
+        onQuickView={(p) => handleOpenQuickView(p)}
         searchQuery={searchQuery}
         userProfile={customerProfile}
         onOpenWishlist={() => setIsWishlistOpen(true)}
       />
 
-      {/* AI Hot Wheels Value & Rarity Scanner */}
-      <div id="scanner">
-        <ValueScanner />
-      </div>
+      {/* Below-the-fold lazy sections with minimal skeleton fallback */}
+      <Suspense fallback={<div className="py-12 flex justify-center"><div className="w-6 h-6 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>}>
+        {/* AI Hot Wheels Value & Rarity Scanner */}
+        <div id="scanner">
+          <ValueScanner />
+        </div>
 
-      {/* Why Redline Garage Trust Section */}
-      <WhyRedline />
+        {/* Why Redline Garage Trust Section */}
+        <WhyRedline />
 
-      {/* Collector of the Month Community Spotlight */}
-      <CollectorSpotlightSection />
+        {/* Collector of the Month Community Spotlight */}
+        <CollectorSpotlightSection />
 
-      {/* Verified Testimonials */}
-      <TestimonialsSection />
+        {/* Verified Testimonials */}
+        <TestimonialsSection />
 
-      {/* Order & Contact Channels Section */}
-      <OrderAndContactSection onOpenCart={() => setIsCartOpen(true)} />
+        {/* Order & Contact Channels Section */}
+        <OrderAndContactSection onOpenCart={() => setIsCartOpen(true)} />
 
-      {/* FAQ Accordion Section */}
-      <FAQSection />
+        {/* FAQ Accordion Section */}
+        <FAQSection />
 
-      {/* Birthday Celebration Auto-Discount Modal */}
-      <BirthdayCelebrationModal
-        userProfile={customerProfile}
-        onApplyCode={() => {
-          setIsCartOpen(true);
-        }}
-      />
+        {/* Birthday Celebration Auto-Discount Modal */}
+        <BirthdayCelebrationModal
+          userProfile={customerProfile}
+          onApplyCode={() => {
+            setIsCartOpen(true);
+          }}
+        />
+      </Suspense>
 
       {/* Showroom Footer with Admin Portal Access & Track Order */}
       <Footer
@@ -471,7 +529,7 @@ export default function App() {
             onClose={() => setIsWishlistOpen(false)}
             products={productsList}
             onAddToCart={handleAddToCart}
-            onQuickView={(p) => setQuickViewProduct(p)}
+            onQuickView={(p) => handleOpenQuickView(p)}
             userProfile={customerProfile}
             onOpenCustomerLogin={() => navigateToRoute('customer-login')}
           />
@@ -481,7 +539,7 @@ export default function App() {
         {quickViewProduct && (
           <QuickViewModal
             product={quickViewProduct}
-            onClose={() => setQuickViewProduct(null)}
+            onClose={handleCloseQuickView}
             onAddToCart={handleAddToCart}
           />
         )}

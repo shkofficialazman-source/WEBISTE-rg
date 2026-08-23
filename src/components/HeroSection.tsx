@@ -85,6 +85,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 Collections.
               </span>
             </h1>
+            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider font-mono text-zinc-700">
+              Buy Authentic Hot Wheels Online in India — Bouquets, Frames & Custom Cards
+            </h2>
 
             {/* Subtext */}
             <p className="text-sm sm:text-base text-zinc-600 max-w-xl font-normal leading-relaxed">

@@ -88,6 +88,17 @@ export const WhyRedline: React.FC = () => {
           </div>
         </div>
 
+        {/* Local SEO & Authentic Collector Studio Context Block */}
+        <div className="mt-10 p-6 sm:p-8 bg-gradient-to-r from-red-50/70 via-zinc-50 to-zinc-50 border border-red-200/80 rounded-2xl text-left space-y-3">
+          <div className="flex items-center gap-2 text-xs font-mono font-bold text-red-600 uppercase tracking-wider">
+            <Flame className="w-4 h-4 text-red-600" />
+            <span>Handcrafted in Mangalore • Delivered Across All Indian PIN Codes</span>
+          </div>
+          <p className="text-xs sm:text-sm text-zinc-700 leading-relaxed font-normal">
+            <strong>Redline Garage</strong> is India’s premier specialty automotive gifting and die-cast collector studio, based in Hampankatta, Mangalore, Karnataka. We specialize in official Mattel Hot Wheels mainline cars, rare Car Culture premiums, handcrafted bouquets, custom photo blister cards, and museum-grade acrylic shadowbox wall frames. Every piece is carefully inspected, packed with shock-absorbing foam in heavy-duty boxes, and dispatched with live tracking to Bangalore, Mumbai, Delhi NCR, Hyderabad, Chennai, Pune, Kolkata, and over 19,000+ PIN codes across India.
+          </p>
+        </div>
+
       </div>
     </section>
   );

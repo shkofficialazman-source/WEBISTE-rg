@@ -79,27 +79,51 @@ export const CustomCardBuilder: React.FC<CustomCardBuilderProps> = ({
     }, 2800);
   };
 
-  // Mouse Move Tilt Calculation
+  const cardRectRef = useRef<DOMRect | null>(null);
+  const tiltRafRef = useRef<number | null>(null);
+
+  // Mouse Move Tilt Calculation (Batched with RAF and cached rect)
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    if (!cardRectRef.current) {
+      cardRectRef.current = cardRef.current.getBoundingClientRect();
+    }
+    const rect = cardRectRef.current;
+    if (!rect || rect.width === 0 || rect.height === 0) return;
 
-    // Gentle, balanced tilt angles (max ~8-10 degrees)
-    const rotateX = Number(((0.5 - y) * 12).toFixed(2));
-    const rotateY = Number(((x - 0.5) * 12).toFixed(2));
+    const clientX = e.clientX;
+    const clientY = e.clientY;
 
-    setTilt({ x: rotateX, y: rotateY });
-    setGlare({ x: Number((x * 100).toFixed(1)), y: Number((y * 100).toFixed(1)), opacity: 0.35 });
+    if (tiltRafRef.current !== null) return;
+
+    tiltRafRef.current = window.requestAnimationFrame(() => {
+      tiltRafRef.current = null;
+      const x = (clientX - rect.left) / rect.width;
+      const y = (clientY - rect.top) / rect.height;
+
+      // Gentle, balanced tilt angles (max ~8-10 degrees)
+      const rotateX = Number(((0.5 - y) * 12).toFixed(2));
+      const rotateY = Number(((x - 0.5) * 12).toFixed(2));
+
+      setTilt({ x: rotateX, y: rotateY });
+      setGlare({ x: Number((x * 100).toFixed(1)), y: Number((y * 100).toFixed(1)), opacity: 0.35 });
+    });
   };
 
   const handleMouseEnter = () => {
     setIsHovered(true);
+    if (cardRef.current) {
+      cardRectRef.current = cardRef.current.getBoundingClientRect();
+    }
   };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
+    cardRectRef.current = null;
+    if (tiltRafRef.current !== null) {
+      window.cancelAnimationFrame(tiltRafRef.current);
+      tiltRafRef.current = null;
+    }
     setTilt({ x: 0, y: 0 });
     setGlare((prev) => ({ ...prev, opacity: 0 }));
   };
