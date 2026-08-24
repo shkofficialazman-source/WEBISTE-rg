@@ -247,26 +247,48 @@ async function startServer() {
         },
       });
 
-      const prompt = `You are the lead Hot Wheels and die-cast valuation expert for Redline Garage. 
-Analyze the provided image of a toy scale car (loose or blister pack).
-Examine all visual cues: car body lines, livery/tampos, wheel type (plastic mainline wheels vs Real Riders rubber tires), packaging card graphics, series name, flame logo, and collector number if visible.
+      const prompt = `You are the chief Hot Wheels & die-cast valuation appraiser for Redline Garage India.
+Carefully examine this photo of a toy scale die-cast car (carded in blister packaging or loose).
 
-Return ONLY a valid JSON object with the following fields:
+CRITICAL RARITY & VARIANT INSPECTION CRITERIA:
+1. Super Treasure Hunt ($TH / STH):
+   - Paint: Spectraflame candy/metallic deep translucent finish (distinct from flat enamel).
+   - Wheels: Real Riders 2-piece authentic rubber tires with custom detailed rims.
+   - Markings: "TH" monogram tampo on the body; Gold circle flame icon printed on the blister card behind the car.
+   - Valuation in India: Typically ₹2,500 to ₹15,000+ depending on casting (e.g., Datsun 510, R34, Porsche 911, Audi R8).
+2. Regular Treasure Hunt (TH):
+   - Markings: Circle Flame logo (flame inside a circle) printed on the car body; Silver circle flame icon behind blister on card.
+   - Valuation in India: ₹499 to ₹1,800.
+3. Red Line Club (RLC) / Convention / NFT Garage / Elite 64:
+   - Features: High-spec acrylic display case, numbered hologram seal, opening parts (hood/doors), mirrored chrome spectraflame.
+   - Valuation in India: ₹3,500 to ₹25,000+.
+4. Car Culture / Boulevard / Premium Lines:
+   - Features: Metal/Metal chassis & body, Real Riders rubber wheels, premium card art.
+   - Valuation in India: ₹799 to ₹3,500.
+5. Vintage Redline Era (1968-1977) & Blackwall Era (1977-1995):
+   - Features: Red stripe on tire sidewalls (Redlines), USA/Hong Kong metal base, classic vintage casting.
+   - Valuation in India: ₹2,500 to ₹35,000+ depending on condition.
+6. Mainline Common / JDM Favorites:
+   - Standard plastic wheels, mainline blue card. Common fantasy castings trade at ₹179–₹249; hyped JDM/Euro castings (Civic, Skyline, Silvia, 911 GT3) trade at ₹299–₹699.
+7. Errors & Factory Packaging Variants:
+   - Unspun rivets, missing tampos, upside-down packaging carded errors can command ₹1,500–₹5,000+ among niche collectors.
+
+OUTPUT FORMAT:
+Return ONLY a pure valid JSON object (no markdown code fences if possible) matching this schema:
 {
-  "isHotWheelsOrDiecast": true or false (false if blurry or clearly not a toy car/diecast),
-  "carModelName": "Accurate car make & model name (e.g. '1971 Datsun 510 Wagon', 'Porsche 911 GT3 RS', 'Bone Shaker', 'Rodger Dodger')",
-  "seriesAndYear": "Estimated series and release year (e.g. '2023 HW J-Imports #120/250', 'Car Culture: Modern Classics (2021)', '1998 First Editions')",
-  "categoryType": "One of: 'Mainline', 'Premium / Real Riders', 'Treasure Hunt (TH)', 'Super Treasure Hunt ($TH)', 'Vintage / Redline Classic', 'Custom / Showroom Special'",
-  "conditionAssessment": "Brief observations on condition (e.g. 'Mint in blister pack with crisp card corners', 'Loose with light playwear on edges', etc.)",
-  "estimatedValueMinINR": number (Minimum estimated collector resale value in Indian Rupees, e.g. 299),
-  "estimatedValueMaxINR": number (Maximum estimated collector resale value in Indian Rupees, e.g. 599),
-  "valueExplanation": "1-2 sentences explaining what drives this valuation (rarity, popularity of the casting, card condition, or market demand in India)",
-  "collectorTip": "1 interesting trivia or collector tip about this car model / casting",
+  "isHotWheelsOrDiecast": true or false,
+  "carModelName": "Accurate car make & model name (e.g. ''71 Datsun 510 Wagon ($TH)', 'Nissan Skyline GT-R BNR34', '1982 Toyota Supra')",
+  "seriesAndYear": "Estimated series and release year (e.g. '2024 HW J-Imports / Super Treasure Hunt #189/250', '2023 Car Culture: Ronin Run', '1968 Sweet 16 Original')",
+  "categoryType": "One of: 'Super Treasure Hunt ($TH)', 'Treasure Hunt (TH)', 'Red Line Club (RLC) / Exclusive', 'Premium / Real Riders', 'Vintage / Redline Classic', 'Mainline (High-Demand JDM/Euro)', 'Mainline (Standard)'",
+  "conditionAssessment": "Specific observations on card condition (e.g. 'Pristine Mint on Card (MOC) with sharp unbent corners and clear blister', 'Loose with minor paint chipping on roofline', etc.)",
+  "estimatedValueMinINR": number (Minimum estimated fair collector market value in INR, e.g. 3500),
+  "estimatedValueMaxINR": number (Maximum estimated fair collector market value in INR, e.g. 7000),
+  "valueExplanation": "2-3 comprehensive sentences explaining specifically WHY this car is valued at this price. If it is a $TH, TH, RLC, or Premium, cite the specific indicators (e.g. 'Identified as a Super Treasure Hunt based on the spectraflame finish and rubber Real Riders tires — these typically resell for ₹X–₹Y due to limited production'). If it is a standard mainline, explain its availability and popularity.",
+  "collectorTip": "1 piece of actionable collector advice (e.g. storage recommendation, protecto-pack advice, or historical trivia about the designer)",
   "confidenceLevel": "'High', 'Medium', or 'Low'"
 }
 
-If the image is too blurry or not a die-cast car at all, set "isHotWheelsOrDiecast": false and provide friendly advice in "valueExplanation".
-Do NOT include markdown backticks around the json if possible, or format as pure JSON.`;
+If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrDiecast': false with a helpful explanation in 'valueExplanation'.`;
 
       // Model cascade with active, supported Gemini vision models
       const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
@@ -849,17 +871,18 @@ Sitemap: https://redlinegarage.in/sitemap.xml
       },
     }));
 
-    // Pre-cache index.html into memory to guarantee near-instantaneous (0-2ms) document request latency (TTFB)
+    // Serve HTML entry document with strict zero-cache headers so new deployments are received instantly
     app.get('*', (req, res) => {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
 
       try {
-        if (!inMemoryIndexHtml && fs.existsSync(indexHtmlPath)) {
-          inMemoryIndexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
-        }
-        if (inMemoryIndexHtml) {
-          return res.send(inMemoryIndexHtml);
+        if (fs.existsSync(indexHtmlPath)) {
+          const freshHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+          return res.send(freshHtml);
         }
       } catch (e) {
         console.warn('HTML disk read warning:', e);

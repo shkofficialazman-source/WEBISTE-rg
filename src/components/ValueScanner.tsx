@@ -1,5 +1,25 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Sparkles, AlertCircle, RefreshCw, CheckCircle2, MessageCircle, HelpCircle, ShieldCheck, Tag, Info, ArrowRight, Flame, WifiOff, Clock, Server, AlertTriangle, Cpu } from 'lucide-react';
+import {
+  Camera,
+  Upload,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
+  MessageCircle,
+  HelpCircle,
+  ShieldCheck,
+  Tag,
+  Info,
+  ArrowRight,
+  Flame,
+  WifiOff,
+  Clock,
+  Server,
+  AlertTriangle,
+  Cpu,
+  Image as ImageIcon,
+  CheckCircle2
+} from 'lucide-react';
 
 interface ScanResultData {
   isHotWheelsOrDiecast: boolean;
@@ -24,141 +44,98 @@ export type ScannerErrorType =
   | 'general';
 
 /**
- * Resizes and compresses image on client side using HTML5 Canvas to max 1024px, JPEG quality 0.82
- * Prevents network drops, timeouts, and multi-megabyte payloads.
+ * Resizes and optimizes user-uploaded photos on the client side using HTML5 Canvas.
+ * Caps maximum dimension at 1200px and encodes as 85% JPEG to prevent payload bloat,
+ * ensuring fast transmission to the Gemini API while preserving fine tampo & wheel details.
  */
-const compressImageForAI = async (source: string | File, maxDimension = 1024, quality = 0.82): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    const onImageLoaded = () => {
-      let { width, height } = img;
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
+const compressImageForAI = async (
+  source: string | File,
+  maxDimension = 1200,
+  quality = 0.85
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const processImage = (img: HTMLImageElement, fallbackData: string) => {
+      try {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
         }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(fallbackData);
+          return;
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      } catch (err) {
+        console.warn('[ValueScanner] Canvas compression issue, falling back to original data:', err);
+        resolve(fallbackData);
       }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(typeof source === 'string' ? source : '');
-        return;
-      }
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-      const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-      resolve(compressedDataUrl);
-    };
-
-    img.onerror = () => {
-      resolve(typeof source === 'string' ? source : '');
     };
 
     if (typeof source === 'string') {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => processImage(img, source);
+      img.onerror = () => resolve(source);
       img.src = source;
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => {
-        img.src = reader.result as string;
-      };
-      reader.onerror = () => {
-        resolve('');
-      };
-      reader.readAsDataURL(source);
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => processImage(img, dataUrl);
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    };
+    reader.onerror = () => {
+      reject(new Error('Unable to read selected photo file.'));
+    };
+    reader.readAsDataURL(source);
   });
 };
-
-interface SampleHotWheels {
-  name: string;
-  subtitle: string;
-  image: string;
-  badge?: string;
-  resultData: ScanResultData;
-}
-
-const SAMPLE_HOTWHEELS: SampleHotWheels[] = [
-  {
-    name: '2024 Aston Martin Vantage GT3',
-    subtitle: 'Exoticars 9/10 • 125/250',
-    image: 'https://images.unsplash.com/photo-1600712242805-5f78671b24da?q=80&w=800&auto=format&fit=crop',
-    badge: 'Exoticars',
-    resultData: {
-      isHotWheelsOrDiecast: true,
-      carModelName: '2024 Aston Martin Vantage GT3',
-      seriesAndYear: '2026 Hot Wheels Mainline #125 / Exoticars 9/10',
-      categoryType: 'Mainline / Exoticars GT3 Race Spec',
-      conditionAssessment: 'Mint on Card (MOC) - Sealed Blister',
-      estimatedValueMinINR: 179,
-      estimatedValueMaxINR: 499,
-      valueExplanation: 'Brand-new 2024 Aston Martin Vantage GT3 casting in crisp white livery with lime green race aero striping and aggressive rear GT wing. Highly sought after by endurance & GT3 motorsport collectors.',
-      collectorTip: 'Keep blister card uncreased. As a fresh debut casting in the Exoticars series, pristine cards command a solid premium among sports car enthusiasts.',
-      confidenceLevel: '99% Confident (Verified Casting Match)',
-    },
-  },
-  {
-    name: "'70 Custom Plymouth Road Runner",
-    subtitle: 'Fast & Furious • Screen Time 7/10',
-    image: 'https://images.unsplash.com/photo-1584345604476-8ec5e12e42dd?q=80&w=800&auto=format&fit=crop',
-    badge: 'Fast & Furious',
-    resultData: {
-      isHotWheelsOrDiecast: true,
-      carModelName: "'70 Custom Plymouth Road Runner",
-      seriesAndYear: '2026 HW Screen Time 7/10 (#221/250)',
-      categoryType: 'HW Screen Time / Fast & Furious Licensed',
-      conditionAssessment: 'Mint on Card (MOC) - Factory Sealed',
-      estimatedValueMinINR: 299,
-      estimatedValueMaxINR: 799,
-      valueExplanation: 'Dominic Toretto inspired 1970 Plymouth Road Runner in iconic Metalflake Hemi Orange with satin black hood scoop and deep dish chrome 5-spokes.',
-      collectorTip: 'Fast & Furious movie licensed castings command quick liquidity and strong secondary collector demand across India.',
-      confidenceLevel: '99% Confident (Screen Time Licensed)',
-    },
-  },
-  {
-    name: "'98 Honda Prelude",
-    subtitle: 'Factory Fresh 5/5 • 138/250',
-    image: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?q=80&w=800&auto=format&fit=crop',
-    badge: 'Factory Fresh',
-    resultData: {
-      isHotWheelsOrDiecast: true,
-      carModelName: "'98 Honda Prelude",
-      seriesAndYear: '2026 Hot Wheels Factory Fresh 5/5 (#138/250)',
-      categoryType: 'Mainline / Factory Fresh JDM',
-      conditionAssessment: 'Mint on Card (MOC) - Ryu Asada Tribute',
-      estimatedValueMinINR: 249,
-      estimatedValueMaxINR: 650,
-      valueExplanation: '5th Gen BB5 Honda Prelude in metallic emerald teal. Designed by legendary master designer Ryu Asada, featuring detailed headlights, glass moonroof, and silver 5-spoke wheels.',
-      collectorTip: 'JDM Factory Fresh models have exceptionally high collector velocity; consider placing in a blister clamshell protector.',
-      confidenceLevel: '98% Confident (JDM Mainline Verified)',
-    },
-  },
-];
 
 export const ValueScanner: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanningStatus, setScanningStatus] = useState<string>('Analyzing... this may take a moment');
+  const [scanningStatus, setScanningStatus] = useState<string>('Uploading photo to AI valuation engine...');
   const [scanResult, setScanResult] = useState<ScanResultData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<ScannerErrorType | null>(null);
   const [rawDiagnosticError, setRawDiagnosticError] = useState<string | null>(null);
   const [showDiagnosticTrace, setShowDiagnosticTrace] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (file: File) => {
+    // Basic file validation
     if (!file.type.startsWith('image/')) {
       console.warn('[ValueScanner] Invalid file uploaded:', { fileName: file.name, type: file.type });
-      setErrorMessage('Please upload a valid image file (JPG, PNG, WEBP).');
+      setErrorMessage('Please upload a valid image file (JPG, PNG, or WEBP).');
+      setErrorType('invalid_input');
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setErrorMessage('The photo file size is too large (max 25MB). Please choose a smaller photo.');
       setErrorType('invalid_input');
       return;
     }
@@ -168,18 +145,23 @@ export const ValueScanner: React.FC = () => {
     setScanResult(null);
 
     try {
-      setScanningStatus('Optimizing image for AI valuation...');
+      setScanningStatus('Optimizing photo resolution for AI appraisal...');
       setIsScanning(true);
-      const compressedBase64 = await compressImageForAI(file, 1024, 0.82);
-      setSelectedImage(compressedBase64);
-      triggerScan(compressedBase64);
-    } catch (err) {
-      console.warn('[ValueScanner] Compression notice, falling back to direct upload:', err);
+      const optimizedBase64 = await compressImageForAI(file, 1200, 0.85);
+      setSelectedImage(optimizedBase64);
+      triggerScan(optimizedBase64);
+    } catch (err: any) {
+      console.warn('[ValueScanner] Optimization warning, falling back to direct reader:', err);
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
         setSelectedImage(base64);
         triggerScan(base64);
+      };
+      reader.onerror = () => {
+        setIsScanning(false);
+        setErrorMessage('Failed to read image file. Please try selecting the photo again.');
+        setErrorType('invalid_input');
       };
       reader.readAsDataURL(file);
     }
@@ -192,48 +174,33 @@ export const ValueScanner: React.FC = () => {
     }
   };
 
-  const handleSelectSample = async (sample: typeof SAMPLE_HOTWHEELS[0]) => {
-    setSelectedImage(sample.image);
-    setErrorMessage(null);
-    setErrorType(null);
-    setScanResult(null);
-    setIsScanning(true);
-    setScanningStatus('Identifying casting details & series tampos...');
-
-    try {
-      const compressed = await compressImageForAI(sample.image, 1024, 0.82);
-      await triggerScan(compressed, sample.resultData);
-    } catch {
-      setTimeout(() => {
-        setScanResult(sample.resultData);
-        setIsScanning(false);
-      }, 1200);
-    }
-  };
-
-  const triggerScan = async (imageBase64: string, fallbackSampleData?: ScanResultData) => {
+  const triggerScan = async (imageBase64: string) => {
     setIsScanning(true);
     setErrorMessage(null);
     setErrorType(null);
     setRawDiagnosticError(null);
     setShowDiagnosticTrace(false);
-    setScanningStatus('Analyzing... this may take a moment');
+    setScanningStatus('Connecting to Gemini AI Valuation Service...');
 
-    console.log('[ValueScanner Client Request]:', {
+    console.log('[ValueScanner Real Photo Scan Request Initiated]:', {
       timestamp: new Date().toISOString(),
       payloadLength: imageBase64.length,
-      isBase64DataUrl: imageBase64.startsWith('data:image/'),
+      isDataUrl: imageBase64.startsWith('data:image/'),
       targetEndpoint: '/api/gemini/scan-hotwheels',
     });
 
-    // Dynamic friendly status updates if server takes a moment
-    const statusTimer1 = setTimeout(() => {
-      setScanningStatus('Reading casting tampos & wheel specifications...');
-    }, 2500);
+    // Dynamic progressive status updates for user engagement
+    const timer1 = setTimeout(() => {
+      setScanningStatus('Examining casting silhouette, rooflines & blister card...');
+    }, 1800);
 
-    const statusTimer2 = setTimeout(() => {
-      setScanningStatus('Cross-referencing Indian collector marketplace pricing...');
-    }, 5500);
+    const timer2 = setTimeout(() => {
+      setScanningStatus('Detecting tampo liveries, wheel specifications & series badges...');
+    }, 4200);
+
+    const timer3 = setTimeout(() => {
+      setScanningStatus('Checking Indian secondary collector market valuation ranges...');
+    }, 7500);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);
@@ -246,41 +213,37 @@ export const ValueScanner: React.FC = () => {
         },
         body: JSON.stringify({
           imageBase64,
+          mimeType: 'image/jpeg',
         }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
-      // Extract raw response text first for full diagnostic transparency
+      // Read raw response text for diagnostic transparency
       let data: any = null;
       let rawText = '';
       try {
         rawText = await response.text();
         data = JSON.parse(rawText);
       } catch (jsonErr) {
-        console.error('[ValueScanner Non-JSON Raw API Response Received]:', {
+        console.error('[ValueScanner Non-JSON Raw API Response]:', {
           httpStatus: response.status,
           statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          rawTextSnippet: rawText.slice(0, 300),
+          rawSnippet: rawText.slice(0, 300),
           jsonErr,
-          timestamp: new Date().toISOString(),
         });
       }
 
-      // CRITICAL REQUIREMENT: Log full response object and error status to console BEFORE any UI messages
-      console.log('[ValueScanner Gemini API Full Response Object]:', {
+      console.log('[ValueScanner Gemini API Response]:', {
         httpStatus: response.status,
         statusText: response.statusText,
         ok: response.ok,
-        headers: Object.fromEntries(response.headers.entries()),
         parsedPayload: data,
-        rawTextLength: rawText.length,
         timestamp: new Date().toISOString(),
       });
 
-      // Handle non-200 or failure payloads with granular error classification
+      // Handle non-200 or failure payloads
       if (!response.ok || !data?.success) {
         let resolvedErrorType: ScannerErrorType = 'general';
         let resolvedErrorMessage = '';
@@ -290,13 +253,13 @@ export const ValueScanner: React.FC = () => {
           resolvedErrorMessage = 'The scan request timed out while communicating with the valuation server. Please tap "Retry Scan Now".';
         } else if (response.status === 429 || data?.errorType === 'quota_exceeded') {
           resolvedErrorType = 'quota_exceeded';
-          resolvedErrorMessage = 'Scanner is temporarily at capacity (Gemini API quota limit reached). Shared quota across the AI Pit Crew Chatbot, Card Stylizer, and Scanner has reached rate limit.';
+          resolvedErrorMessage = 'Gemini API quota limit reached. Please wait a moment and tap "Retry Scan Now".';
         } else if (response.status === 503 || response.status === 502 || data?.errorType === 'service_busy') {
           resolvedErrorType = 'service_busy';
-          resolvedErrorMessage = 'Gemini AI vision services are currently experiencing high traffic. Please tap "Retry Scan Now" in a few seconds.';
+          resolvedErrorMessage = 'Gemini AI vision services are currently experiencing high traffic. Please retry in a few moments.';
         } else if (response.status === 400 || data?.errorType === 'invalid_input') {
           resolvedErrorType = 'invalid_input';
-          resolvedErrorMessage = data?.error || 'Uploaded image could not be processed. Please try another photo.';
+          resolvedErrorMessage = data?.error || 'Uploaded photo could not be processed. Please try another clear photo.';
         } else if (response.status === 500 || data?.errorType === 'internal_api_error') {
           resolvedErrorType = 'internal_api_error';
           resolvedErrorMessage = data?.error || 'Internal AI engine error occurred while appraising this car.';
@@ -305,24 +268,12 @@ export const ValueScanner: React.FC = () => {
           resolvedErrorMessage = data?.error || `API returned status ${response.status} (${response.statusText || 'Error'}).`;
         }
 
-        // Log full error details to console BEFORE UI state update
-        console.error('[ValueScanner Gemini API Error Status & Object]:', {
+        console.error('[ValueScanner Scan Error]:', {
           httpStatus: response.status,
-          statusText: response.statusText,
           errorType: resolvedErrorType,
           errorMessage: resolvedErrorMessage,
           rawError: data?.rawError || rawText,
-          isApiKeyConfigured: data?.isApiKeyConfigured,
-          apiKeySource: data?.apiKeySource,
-          elapsedMs: data?.elapsedMs,
-          timestamp: new Date().toISOString(),
         });
-
-        if (fallbackSampleData) {
-          setScanResult(fallbackSampleData);
-          setErrorMessage(null);
-          return;
-        }
 
         setErrorType(resolvedErrorType);
         setRawDiagnosticError(
@@ -333,55 +284,44 @@ export const ValueScanner: React.FC = () => {
         throw new Error(resolvedErrorMessage);
       }
 
-      // Success
-      console.log('[ValueScanner Gemini API Scan Succeeded]:', {
+      // Success payload
+      console.log('[ValueScanner Photo Appraisal Completed]:', {
         modelUsed: data.modelUsed,
-        isAiLive: data.isAiLive,
-        isApiKeyConfigured: data.isApiKeyConfigured,
-        apiKeySource: data.apiKeySource,
-        elapsedMs: data.elapsedMs,
         carIdentified: data.data?.carModelName,
-        timestamp: new Date().toISOString(),
+        category: data.data?.categoryType,
+        estimatedINR: `₹${data.data?.estimatedValueMinINR} - ₹${data.data?.estimatedValueMaxINR}`,
+        elapsedMs: data.elapsedMs,
       });
 
       setScanResult(data.data);
     } catch (err: any) {
-      console.error('[ValueScanner Client Caught Scan Exception]:', {
+      console.error('[ValueScanner Scan Exception]:', {
         errorName: err.name,
         message: err.message,
         isAbort: err.name === 'AbortError',
-        stack: err.stack,
-        timestamp: new Date().toISOString(),
       });
 
-      if (fallbackSampleData) {
-        setScanResult(fallbackSampleData);
-        setErrorMessage(null);
-        return;
-      }
-
-      let msg = err.message || 'Failed to scan image. Please try again with a brighter, centered photo.';
+      let msg = err.message || 'Failed to scan image. Please try again with a brighter, well-lit photo.';
       let type: ScannerErrorType = 'general';
 
       if (err.name === 'AbortError' || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout')) {
         type = 'network_timeout';
-        msg = 'Scan request timed out. Please tap "Retry Scan Now" to retry.';
+        msg = 'Scan request timed out. Please tap "Retry Scan Now".';
       } else if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('429') || msg.toLowerCase().includes('capacity')) {
         type = 'quota_exceeded';
-      } else if (msg.toLowerCase().includes('busy') || msg.toLowerCase().includes('503') || msg.toLowerCase().includes('high traffic') || msg.toLowerCase().includes('demand')) {
+      } else if (msg.toLowerCase().includes('busy') || msg.toLowerCase().includes('503') || msg.toLowerCase().includes('traffic')) {
         type = 'service_busy';
-      } else if (msg.toLowerCase().includes('internal') || msg.toLowerCase().includes('500') || msg.toLowerCase().includes('engine error')) {
+      } else if (msg.toLowerCase().includes('internal') || msg.toLowerCase().includes('500')) {
         type = 'internal_api_error';
-      } else if (msg.toLowerCase().includes('identify') || msg.toLowerCase().includes('recognize') || msg.toLowerCase().includes('blurry')) {
-        type = 'unrecognized_car';
       }
 
       setErrorType(type);
       setErrorMessage(msg);
     } finally {
       clearTimeout(timeoutId);
-      clearTimeout(statusTimer1);
-      clearTimeout(statusTimer2);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
       setIsScanning(false);
     }
   };
@@ -410,21 +350,25 @@ export const ValueScanner: React.FC = () => {
     setSelectedImage(null);
     setScanResult(null);
     setErrorMessage(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setErrorType(null);
+    setRawDiagnosticError(null);
+    setShowDiagnosticTrace(false);
+    setIsScanning(false);
+    setIsDragging(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
   return (
     <section id="scanner" className="py-20 bg-zinc-950 text-white relative overflow-hidden border-t border-b border-red-900/30">
-      {/* Ambient background glow */}
+      {/* Ambient background glows */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Title & Eyebrow */}
-        <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/30 text-red-400 font-mono text-xs font-bold uppercase tracking-widest">
+        {/* Title Header */}
+        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-600/20 border border-red-500/30 text-red-400 font-mono text-xs font-bold uppercase tracking-widest">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             <span>AI Die-Cast Valuation Engine</span>
           </div>
@@ -432,86 +376,108 @@ export const ValueScanner: React.FC = () => {
             Scan Your <span className="text-red-500">Hot Wheels</span> Car
           </h2>
           <p className="text-sm sm:text-base text-zinc-400 font-light leading-relaxed">
-            Snap or upload a photo of any Hot Wheels scale model (carded blister pack or loose). Our server-side Gemini intelligence will identify the exact casting, series release, condition, and estimated secondary market collector value in Indian Rupees (INR).
+            Upload or take a photo of your carded blister pack or loose die-cast car. Our Gemini AI engine will inspect the casting, series, tampo details, and estimate fair market collector value in Indian Rupees (₹).
           </p>
         </div>
 
-        {/* Main Scanner Container */}
+        {/* Scanner Body Card */}
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-sm">
           {!selectedImage ? (
-            /* Upload Screen */
-            <div className="space-y-8">
+            /* Upload Screen (Enforces Real Photo Upload) */
+            <div className="space-y-6 max-w-2xl mx-auto">
+              {/* Hidden File & Camera Inputs */}
               <input
                 ref={fileInputRef}
                 type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
                 accept="image/*"
+                capture="environment"
                 className="hidden"
                 onChange={handleFileChange}
               />
 
-              {/* Drag & Drop Zone */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const file = e.dataTransfer.files?.[0];
-                  if (file) handleImageUpload(file);
-                }}
-                className="border-2 border-dashed border-zinc-700 hover:border-red-500 bg-zinc-950/60 hover:bg-zinc-950/90 rounded-2xl p-8 sm:p-12 text-center transition-all cursor-pointer group flex flex-col items-center justify-center gap-4"
-              >
-                <div className="w-16 h-16 rounded-2xl bg-red-600/10 border border-red-500/30 flex items-center justify-center text-red-500 group-hover:scale-110 group-hover:bg-red-600 group-hover:text-white transition-all shadow-lg">
-                  <Camera className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-lg font-bold text-white font-sans uppercase">
-                    Take Photo or Click to Upload Car
-                  </div>
-                  <p className="text-xs text-zinc-400 font-mono">
-                    Supports JPG, PNG, WEBP • Works on blister packs or loose die-cast cars
-                  </p>
-                </div>
+              {/* Top Primary Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   type="button"
-                  className="mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-mono font-bold uppercase px-6 py-3 rounded-xl shadow-lg shadow-red-600/20 transition-all flex items-center gap-2 cursor-pointer min-h-[44px]"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="bg-red-600 hover:bg-red-500 text-white font-mono text-sm font-bold uppercase px-6 py-4 rounded-2xl shadow-xl shadow-red-600/25 transition-all flex items-center justify-center gap-3 cursor-pointer min-h-[56px] group hover:scale-[1.01] active:scale-[0.99]"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>Choose Image File</span>
+                  <Camera className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                  <span>Take Live Photo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-sm font-bold uppercase px-6 py-4 rounded-2xl border border-zinc-700 hover:border-zinc-500 transition-all flex items-center justify-center gap-3 cursor-pointer min-h-[56px] group hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <Upload className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
+                  <span>Choose from Gallery</span>
                 </button>
               </div>
 
-              {/* Sample test cars */}
-              <div className="space-y-3 pt-4 border-t border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                    Or Try Instant Demo Cars:
-                  </span>
-                  <span className="text-[11px] text-red-400 font-mono">Click any sample below</span>
+              {/* Drag & Drop Target Zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleImageUpload(file);
+                }}
+                className={`border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center transition-all cursor-pointer group flex flex-col items-center justify-center gap-3.5 ${
+                  isDragging
+                    ? 'border-red-500 bg-red-950/30 scale-[1.01]'
+                    : 'border-zinc-700 hover:border-red-500/80 bg-zinc-950/70 hover:bg-zinc-950/90'
+                }`}
+              >
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+                  isDragging
+                    ? 'bg-red-600 text-white scale-110'
+                    : 'bg-zinc-800/80 border border-zinc-700 text-zinc-400 group-hover:text-red-400 group-hover:border-red-500/40'
+                }`}>
+                  <ImageIcon className="w-7 h-7" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {SAMPLE_HOTWHEELS.map((sample, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSelectSample(sample)}
-                      className="bg-zinc-950/80 hover:bg-zinc-800 border border-zinc-800 hover:border-red-500/60 p-3 rounded-xl flex items-center gap-3 text-left transition-all cursor-pointer group min-h-[44px] relative overflow-hidden"
-                    >
-                      <img
-                        src={sample.image}
-                        alt={sample.name}
-                        referrerPolicy="no-referrer"
-                        className="w-12 h-12 object-cover rounded-lg border border-zinc-700 group-hover:border-red-500 transition-colors shrink-0"
-                      />
-                      <div className="overflow-hidden flex-1 min-w-0">
-                        {sample.badge && (
-                          <span className="inline-block text-[9px] font-mono font-bold uppercase tracking-wider text-red-400 bg-red-950/60 border border-red-800/40 px-1.5 py-0.2 rounded-sm mb-0.5">
-                            {sample.badge}
-                          </span>
-                        )}
-                        <div className="text-xs font-bold text-white truncate font-sans">{sample.name}</div>
-                        <div className="text-[10px] text-zinc-400 font-mono truncate">{sample.subtitle}</div>
-                      </div>
-                    </button>
-                  ))}
+                <div className="space-y-1">
+                  <div className="text-base font-bold text-white font-sans uppercase tracking-tight">
+                    {isDragging ? 'Drop Your Photo Here to Scan' : 'Or Drag & Drop Die-Cast Photo Here'}
+                  </div>
+                  <p className="text-xs text-zinc-400 font-mono">
+                    Supports JPG, PNG, WEBP • Works on sealed blister cards or loose cars
+                  </p>
+                </div>
+              </div>
+
+              {/* Scanning Best Practices Tip Box */}
+              <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-2">
+                <div className="text-xs font-mono text-zinc-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-red-400" />
+                  <span>How to get the most accurate appraisal:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-[11px] font-mono text-zinc-400">
+                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
+                    <span className="text-zinc-200 font-semibold block mb-0.5">1. Bright Lighting</span>
+                    Ensure good lighting on the blister card or car paint finish.
+                  </div>
+                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
+                    <span className="text-zinc-200 font-semibold block mb-0.5">2. Visible Tampos & Card</span>
+                    Keep car logos, collector numbers, or card art in clear view.
+                  </div>
+                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
+                    <span className="text-zinc-200 font-semibold block mb-0.5">3. Avoid Heavy Glare</span>
+                    Angle your camera slightly to minimize plastic blister reflections.
+                  </div>
                 </div>
               </div>
             </div>
@@ -538,12 +504,12 @@ export const ValueScanner: React.FC = () => {
                       <span>{scanningStatus}</span>
                     </div>
                     <p className="text-xs text-zinc-400 font-mono max-w-sm">
-                      Examining car casting silhouettes, card graphics, tampo liveries, and secondary market valuations.
+                      Examining casting silhouette, packaging card tampos, wheel variations, and collector market pricing.
                     </p>
                   </div>
                 </div>
               ) : errorMessage ? (
-                /* Granular Differentiated Error State */
+                /* Error Recovery State */
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-center space-y-4 max-w-lg mx-auto shadow-xl">
                   <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center ${
                     errorType === 'network_timeout'
@@ -607,9 +573,6 @@ export const ValueScanner: React.FC = () => {
                             <span className="text-[9px] text-zinc-500">{errorType?.toUpperCase()}</span>
                           </div>
                           <div className="text-zinc-300">{rawDiagnosticError}</div>
-                          <div className="text-zinc-500 pt-1 border-t border-zinc-900">
-                            Hostinger Production Notice: If deploying on Hostinger, ensure <span className="text-zinc-300 font-bold">GEMINI_API_KEY</span> is set in Hostinger hPanel → Node.js App → Environment Variables, or via a root <span className="text-zinc-300 font-bold">.env</span> file.
-                          </div>
                         </div>
                       )}
                     </div>
@@ -619,20 +582,11 @@ export const ValueScanner: React.FC = () => {
                     <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-3 text-left text-xs font-mono text-amber-300/90 space-y-1">
                       <div className="font-bold text-[11px] uppercase flex items-center gap-1">
                         <Cpu className="w-3.5 h-3.5" />
-                        <span>Shared Gemini API Quota Notice:</span>
+                        <span>Shared Gemini API Notice:</span>
                       </div>
                       <div className="text-[11px] text-amber-200/80">
-                        The AI Chatbot, Blister Card Stylizer, and Value Scanner share requests per minute (RPM). Please pause for a few seconds before retrying.
+                        Please pause for a few seconds before retrying the appraisal scan.
                       </div>
-                    </div>
-                  )}
-
-                  {errorType === 'unrecognized_car' && (
-                    <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3.5 text-left text-xs font-mono text-zinc-400 space-y-1">
-                      <div className="text-zinc-200 font-bold text-[11px] uppercase">📸 Pro Scanning Tips:</div>
-                      <div>• Place car flat on a solid, well-lit surface</div>
-                      <div>• Frame the full blister card or side profile of the vehicle</div>
-                      <div>• Avoid heavy glare or shadows over the wheels & tampo art</div>
                     </div>
                   )}
 
@@ -650,7 +604,7 @@ export const ValueScanner: React.FC = () => {
                       onClick={handleReset}
                       className="bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold uppercase px-5 py-3 rounded-xl transition cursor-pointer min-h-[44px] border border-zinc-700"
                     >
-                      Try Another Photo
+                      Choose Another Photo
                     </button>
                   </div>
                 </div>
@@ -688,7 +642,7 @@ export const ValueScanner: React.FC = () => {
                       onClick={handleReset}
                       className="bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] shadow-lg shadow-red-600/20"
                     >
-                      Scan Another Photo
+                      Take / Upload New Photo
                     </button>
                   </div>
                 </div>
@@ -717,7 +671,7 @@ export const ValueScanner: React.FC = () => {
                         className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold uppercase py-2.5 rounded-xl transition border border-zinc-700 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Scan Another Car</span>
+                        <span>Scan Another Car Photo</span>
                       </button>
                     </div>
 
@@ -749,7 +703,7 @@ export const ValueScanner: React.FC = () => {
                         <div className="pt-2 border-t border-red-900/40">
                           <div className="flex items-start gap-1.5 text-[11px] text-zinc-400 font-mono">
                             <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-                            <span>Estimate generated by AI based on general market trends. Actual resale value may vary.</span>
+                            <span>Estimate generated by AI based on collector market trends. Actual resale value may vary based on buyer and condition.</span>
                           </div>
                         </div>
                       </div>

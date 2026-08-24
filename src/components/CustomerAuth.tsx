@@ -95,7 +95,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({
       <div className="w-full max-w-md z-10">
         {/* Brand Header */}
         <div className="text-center mb-8 flex flex-col items-center">
-          <RedlineLogo variant="badge" size="lg" className="mb-4" />
+          <RedlineLogo variant="full" theme="light" size="lg" className="mb-4" />
           <h1 className="text-2xl font-black uppercase tracking-tight font-mono text-zinc-900">
             {mode === 'login' ? 'Customer Account Login' : 'Create Collector Account'}
           </h1>

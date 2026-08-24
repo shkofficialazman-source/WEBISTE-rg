@@ -97,6 +97,7 @@ import { OrderStatusChip } from './OrderStatusChip';
 import { InvoiceModal } from '../InvoiceModal';
 import { RedlineLogo } from '../RedlineLogo';
 import { BrandedLoadingScreen } from '../BrandedLoadingScreen';
+import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME } from '../../brandAssets';
 import { awardPointsForOrder } from '../../loyalty';
 import {
   signInWithGoogleForSheets,

@@ -10,12 +10,13 @@ import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
 import { ProductCatalog } from './components/ProductCatalog';
-import { WhyRedline } from './components/WhyRedline';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { BrandedLoadingScreen } from './components/BrandedLoadingScreen';
+import { BRAND_ASSETS, BRAND_NAME } from './brandAssets';
 
 // Code-split heavy interactive components, modals, drawers, chatbot and admin portals for lightning initial load
+const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
 const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
 const CollectorSpotlightSection = React.lazy(() => import('./components/CollectorSpotlightSection').then(m => ({ default: m.CollectorSpotlightSection })));
 const TestimonialsSection = React.lazy(() => import('./components/TestimonialsSection').then(m => ({ default: m.TestimonialsSection })));
@@ -402,7 +403,7 @@ export default function App() {
     }
 
     return (
-      <Suspense fallback={<BrandedLoadingScreen message="Loading Redline Garage Command Center..." submessage="Syncing products, orders, inventory & Supabase database" />}>
+      <Suspense fallback={<BrandedLoadingScreen message={`Loading ${BRAND_NAME} Command Center...`} submessage="Syncing products, orders, inventory & Supabase database" />}>
         <AdminDashboard
           onLogout={() => navigateToRoute('store')}
           onBackToStore={() => navigateToRoute('store')}

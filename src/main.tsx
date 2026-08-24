@@ -20,6 +20,19 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
   }
 }
 
+// Defensively unregister any stale Service Worker & purge deprecated offline caches
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  try {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (_err) {
+    // Ignore SW unregister errors
+  }
+}
+
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
@@ -33,4 +46,3 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
-

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { subscribeToNewsletterInFirestore } from '../firebase';
 import { RedlineLogo } from './RedlineLogo';
+import { BRAND_ASSETS, BRAND_NAME, BRAND_TAGLINE } from '../brandAssets';
 
 interface FooterProps {
   onNavigate: (sectionId: string) => void;
@@ -310,7 +311,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onSelectCategory, on
             <div>
               <RedlineLogo variant="full" theme="light" />
               <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mt-1">
-                PREMIUM HOT WHEELS GIFTS & WALL ART
+                {BRAND_TAGLINE}
               </div>
             </div>
 
@@ -325,10 +326,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onSelectCategory, on
                 <span>Store Contact Info:</span>
               </div>
               <div className="text-[10px] text-zinc-500 space-y-0.5">
-                <div>• Logo: <span className="text-zinc-800 font-medium">Redline Garage</span></div>
-                <div>• WhatsApp: <span className="text-zinc-800 font-medium">+91 8431294886</span></div>
-                <div>• Instagram: <a href="https://www.instagram.com/redline_.garage/" target="_blank" rel="noopener noreferrer" className="text-pink-600 font-medium hover:underline">@redline_.garage</a></div>
-                <div>• Prices & Currency: <span className="text-zinc-800 font-medium">INR (₹)</span></div>
+                <div>• Logo: <span className="text-zinc-800 font-medium">{BRAND_NAME}</span></div>
+                <div>• WhatsApp: <span className="text-zinc-800 font-medium">{BRAND_ASSETS.storeContact.whatsapp}</span></div>
+                <div>• Instagram: <a href={BRAND_ASSETS.storeContact.instagramUrl} target="_blank" rel="noopener noreferrer" className="text-pink-600 font-medium hover:underline">{BRAND_ASSETS.storeContact.instagram}</a></div>
+                <div>• Prices & Currency: <span className="text-zinc-800 font-medium">{BRAND_ASSETS.storeContact.currency} ({BRAND_ASSETS.storeContact.currencySymbol})</span></div>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { Product } from './types';
 import { FAQS } from './data/extraData';
+import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME, BRAND_TAGLINE } from './brandAssets';
 
 export type PageType = 
   | 'home' 
@@ -197,14 +198,14 @@ export const updateSEO = (config: SEOConfig) => {
   const orgSchema = {
     '@type': 'Store',
     '@id': `${siteUrl}/#organization`,
-    name: 'Redline Garage',
-    alternateName: 'Redline Garage India',
+    name: BRAND_NAME,
+    alternateName: `${BRAND_NAME} India`,
     url: siteUrl,
     logo: {
       '@type': 'ImageObject',
-      url: `${siteUrl}/favicon.svg`,
-      width: 512,
-      height: 512,
+      url: `${siteUrl}${BRAND_LOGO_PATH}`,
+      width: BRAND_ASSETS.logo.width,
+      height: BRAND_ASSETS.logo.height,
     },
     image: DEFAULT_IMAGE,
     description: DEFAULT_DESCRIPTION,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { RedlineLogo } from './RedlineLogo';
+import { BRAND_ASSETS, BRAND_NAME } from '../brandAssets';
 
 interface BrandedLoadingScreenProps {
   message?: string;
@@ -8,7 +9,7 @@ interface BrandedLoadingScreenProps {
 }
 
 export const BrandedLoadingScreen: React.FC<BrandedLoadingScreenProps> = ({
-  message = 'Initializing Redline Garage...',
+  message = `Initializing ${BRAND_NAME}...`,
   submessage = 'Connecting to Die-Cast Inventory & Pit Lane',
   fullScreen = true,
 }) => {
