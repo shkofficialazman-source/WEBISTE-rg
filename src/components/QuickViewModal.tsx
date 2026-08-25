@@ -191,11 +191,11 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
               {/* Badges Overlay */}
               <div className="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
                 {isOutOfStock ? (
-                  <span className="bg-zinc-900/90 text-white text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-md backdrop-blur-xs">
+                  <span className="bg-zinc-900/95 text-white text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-md backdrop-blur-xs">
                     Sold Out
                   </span>
                 ) : isLowStock ? (
-                  <span className="bg-amber-600/95 text-white text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-xs animate-pulse">
+                  <span className="bg-amber-500 text-zinc-950 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-xs animate-pulse">
                     <AlertTriangle className="w-3 h-3" />
                     <span>Low Stock: Only {product.stockCount} left</span>
                   </span>
@@ -239,7 +239,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const shareUrl = `https://redlinegarage.in/?product=${encodeURIComponent(product.id)}`;
+                  const shareOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://redlinegarage.store';
+                  const shareUrl = `${shareOrigin}/?product=${encodeURIComponent(product.id)}`;
                   if (navigator.clipboard) {
                     navigator.clipboard.writeText(shareUrl);
                     setCopiedLink(true);

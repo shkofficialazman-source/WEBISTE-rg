@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Product, CartItem, CustomCardConfig, CategoryId, UserProfile } from './types';
+import { Product, CartItem, CustomCardConfig, CategoryId, UserProfile, PitCrewRole, Category } from './types';
 import { auth, isUserAdmin, fetchProductsFromFirestore, fetchUserProfile, customerSignOut } from './firebase';
-import { fetchProductsFromSupabase, subscribeToProducts } from './supabase';
+import { fetchProductsFromSupabase, subscribeToProducts, fetchCategoriesFromSupabase, subscribeToCategories } from './supabase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { updateSEO } from './seo';
 
@@ -18,6 +18,8 @@ import { BRAND_ASSETS, BRAND_NAME } from './brandAssets';
 // Code-split heavy interactive components, modals, drawers, chatbot and admin portals for lightning initial load
 const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
 const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
+const AskAiPitCrewSection = React.lazy(() => import('./components/AskAiPitCrewSection').then(m => ({ default: m.AskAiPitCrewSection })));
+const AskAiPitCrewModal = React.lazy(() => import('./components/AskAiPitCrewModal').then(m => ({ default: m.AskAiPitCrewModal })));
 const CollectorSpotlightSection = React.lazy(() => import('./components/CollectorSpotlightSection').then(m => ({ default: m.CollectorSpotlightSection })));
 const TestimonialsSection = React.lazy(() => import('./components/TestimonialsSection').then(m => ({ default: m.TestimonialsSection })));
 const OrderAndContactSection = React.lazy(() => import('./components/OrderAndContactSection').then(m => ({ default: m.OrderAndContactSection })));
@@ -41,9 +43,14 @@ export default function App() {
   const [customerProfile, setCustomerProfile] = useState<UserProfile | null>(null);
   const [isOrdersModalOpen, setIsOrdersModalOpen] = useState(false);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [isPitCrewModalOpen, setIsPitCrewModalOpen] = useState(false);
+  const [pitCrewRole, setPitCrewRole] = useState<PitCrewRole>('turbo');
 
-  // Products loaded from live Supabase database
+  // Products and Categories loaded from live Supabase database
   const [productsList, setProductsList] = useState<Product[]>([]);
+  const [categoriesList, setCategoriesList] = useState<Category[]>([]);
+  const [isInitialDataLoading, setIsInitialDataLoading] = useState<boolean>(true);
+  const [isDataSyncing, setIsDataSyncing] = useState<boolean>(false);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -141,39 +148,115 @@ export default function App() {
       }
     };
 
+    // Detect legacy/external hash-based URLs (e.g. /#catalog, /#categories, /#scanner, /#faq)
+    // and map them into clean state/scroll actions while normalizing the browser history
+    const processHashRouting = () => {
+      const rawHash = window.location.hash ? window.location.hash.replace(/^#\/?/, '').toLowerCase() : '';
+      if (!rawHash) return;
+
+      const categorySlugs = ['bouquets', 'frames', 'custom-cards', 'scale-models'];
+      if (categorySlugs.includes(rawHash)) {
+        setSelectedCategory(rawHash);
+        const newUrl = new URL(window.location.href);
+        newUrl.hash = '';
+        newUrl.searchParams.set('category', rawHash);
+        window.history.replaceState({}, '', newUrl.toString());
+        setTimeout(() => {
+          const catalogElem = document.getElementById('catalog');
+          if (catalogElem) catalogElem.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+        return;
+      }
+
+      if (rawHash === 'catalog' || rawHash === 'categories' || rawHash === 'shop') {
+        const newUrl = new URL(window.location.href);
+        newUrl.hash = '';
+        window.history.replaceState({}, '', newUrl.toString());
+        setTimeout(() => {
+          const target = document.getElementById(rawHash === 'categories' ? 'categories' : 'catalog');
+          if (target) target.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+        return;
+      }
+
+      const matchingElem = document.getElementById(rawHash);
+      if (matchingElem) {
+        const newUrl = new URL(window.location.href);
+        newUrl.hash = '';
+        window.history.replaceState({}, '', newUrl.toString());
+        setTimeout(() => {
+          matchingElem.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
+    };
+
+    processHashRouting();
+
     window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', processHashRouting);
     return () => {
       unsubscribe();
       window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', processHashRouting);
     };
   }, []);
 
-  // Fetch live products directly from Supabase & keep live sync
+  // Trigger subtle, non-intrusive sync status indicator
+  const triggerSyncNotice = () => {
+    setIsDataSyncing(true);
+    setTimeout(() => {
+      setIsDataSyncing(false);
+    }, 1800);
+  };
+
+  // Fetch live products & categories directly from Supabase & keep live sync
+  const loadStoreData = async (showNotice = false) => {
+    if (showNotice) {
+      setIsDataSyncing(true);
+    }
+    try {
+      const [supabaseProds, supabaseCats] = await Promise.all([
+        fetchProductsFromSupabase(),
+        fetchCategoriesFromSupabase(),
+      ]);
+      setProductsList(supabaseProds || []);
+      setCategoriesList(supabaseCats || []);
+    } catch (err) {
+      console.warn('Error loading live store data from Supabase:', err);
+    } finally {
+      setIsInitialDataLoading(false);
+      if (showNotice) {
+        setTimeout(() => setIsDataSyncing(false), 1200);
+      }
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
-    const loadProducts = async () => {
-      try {
-        const supabaseProds = await fetchProductsFromSupabase();
-        if (isMounted) {
-          setProductsList(supabaseProds);
-        }
-      } catch (err) {
-        console.warn('Error loading live products from Supabase:', err);
-      }
-    };
-    loadProducts();
+    loadStoreData();
 
-    const unsub = subscribeToProducts((freshProducts) => {
+    const unsubProds = subscribeToProducts((freshProducts) => {
       if (isMounted) {
-        setProductsList(freshProducts);
+        setProductsList(freshProducts || []);
+        setIsInitialDataLoading(false);
+        triggerSyncNotice();
+      }
+    });
+
+    const unsubCats = subscribeToCategories((freshCats) => {
+      if (isMounted) {
+        setCategoriesList(freshCats || []);
+        setIsInitialDataLoading(false);
+        triggerSyncNotice();
       }
     });
 
     return () => {
       isMounted = false;
-      unsub();
+      unsubProds();
+      unsubCats();
     };
-  }, [currentRoute]);
+  }, []);
 
   // Deep-link product & category query parameters on initial load & popstate
   useEffect(() => {
@@ -415,6 +498,17 @@ export default function App() {
   // -------------------------------------------------------------
   // ROUTE 4: CUSTOMER STOREFRONT (/)
   // -------------------------------------------------------------
+  if (isInitialDataLoading && productsList.length === 0) {
+    return (
+      <BrandedLoadingScreen
+        fullScreen={true}
+        message="Loading Authentic Die-Cast Collection..."
+        submessage="Connecting to Redline Garage Vault & Live Inventory"
+        onRetry={loadStoreData}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased selection:bg-red-600 selection:text-white pb-20 md:pb-0 w-full max-w-full overflow-x-hidden">
       {/* Scroll Progress Driving Car Bar */}
@@ -433,6 +527,10 @@ export default function App() {
         onOpenMyOrders={() => setIsOrdersModalOpen(true)}
         onCustomerLogout={handleCustomerSignOut}
         onOpenWishlist={() => setIsWishlistOpen(true)}
+        onOpenPitCrew={(role) => {
+          if (role) setPitCrewRole(role);
+          setIsPitCrewModalOpen(true);
+        }}
       />
 
       {/* Hero Section */}
@@ -446,11 +544,19 @@ export default function App() {
       </div>
 
       {/* Category Grid Section */}
-      <CategoryGrid onSelectCategory={(catId: CategoryId) => handleSelectCategory(catId)} />
+      <CategoryGrid 
+        categories={categoriesList}
+        isLoading={isInitialDataLoading}
+        onRetry={loadStoreData}
+        onSelectCategory={(catId: CategoryId) => handleSelectCategory(catId)} 
+      />
 
       {/* Product Catalog & Shop Grid */}
       <ProductCatalog
         products={productsList}
+        categories={categoriesList}
+        isLoading={isInitialDataLoading}
+        onRetry={loadStoreData}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
         onAddToCart={handleAddToCart}
@@ -466,6 +572,14 @@ export default function App() {
         <div id="scanner">
           <ValueScanner />
         </div>
+
+        {/* Ask AI Pit Crew Interactive Team Showcase Section */}
+        <AskAiPitCrewSection
+          onOpenChat={(role) => {
+            if (role) setPitCrewRole(role);
+            setIsPitCrewModalOpen(true);
+          }}
+        />
 
         {/* Why Redline Garage Trust Section */}
         <WhyRedline />
@@ -497,6 +611,8 @@ export default function App() {
         onSelectCategory={handleSelectCategory}
         onOpenAdmin={() => navigateToRoute(adminUser ? 'admin' : 'admin-login')}
         onOpenMyOrders={() => setIsOrdersModalOpen(true)}
+        isDataSyncing={isDataSyncing}
+        onForceSync={() => loadStoreData(true)}
       />
 
       {/* Lazy Modals & Drawers */}
@@ -545,8 +661,20 @@ export default function App() {
           />
         )}
 
-        {/* Redline Garage AI Pit Crew Chatbot */}
-        <GeminiChatbot />
+        {/* Dedicated Full Ask AI Pit Crew Modal */}
+        {isPitCrewModalOpen && (
+          <AskAiPitCrewModal
+            isOpen={isPitCrewModalOpen}
+            onClose={() => setIsPitCrewModalOpen(false)}
+            onNavigate={handleNavigate}
+            initialRole={pitCrewRole}
+          />
+        )}
+
+        {/* Floating Redline Garage AI Pit Crew Chatbot */}
+        {!isPitCrewModalOpen && (
+          <GeminiChatbot onNavigate={handleNavigate} />
+        )}
       </Suspense>
 
       {/* Mobile Floating Bottom Navigation Bar */}

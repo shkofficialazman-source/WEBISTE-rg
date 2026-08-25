@@ -52,7 +52,7 @@ export const BirthdayCelebrationModal: React.FC<BirthdayCelebrationModalProps> =
   };
 
   const handleShareWhatsApp = () => {
-    const msg = `🎂 Celebrating my birthday with Redline Garage! 🚗💨\nGot an exclusive 20% OFF coupon code: *${birthdayCode.code}* valid on premium Hot Wheels & custom blister packs! Check out their showroom at https://redlinegarage.shop`;
+    const msg = `🎂 Celebrating my birthday with Redline Garage! 🚗💨\nGot an exclusive 20% OFF coupon code: *${birthdayCode.code}* valid on premium Hot Wheels & custom blister packs! Check out their showroom at https://redlinegarage.store`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 

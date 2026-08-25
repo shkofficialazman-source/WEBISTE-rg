@@ -234,3 +234,24 @@ export interface NewsletterSubscriber {
   couponCodeIssued?: string;
   notes?: string;
 }
+
+export type PitCrewRole = 'turbo' | 'sparky' | 'gearbox';
+
+export interface PitCrewMemberInfo {
+  id: PitCrewRole;
+  name: string;
+  title: string;
+  avatar: string;
+  badge: string;
+  specialty: string;
+  description: string;
+  welcomeMessage: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  crewMember?: PitCrewRole;
+}

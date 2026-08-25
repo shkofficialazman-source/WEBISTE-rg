@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Product, Category, CategoryId, UserProfile } from '../types';
 import { ShoppingCart, PhoneCall, Sparkles, Star, Eye, Tag, AlertCircle, Filter, SlidersHorizontal, Check, RotateCcw, Boxes, Heart, Clock, ArrowRight } from 'lucide-react';
 import { fetchCategoriesFromSupabase, subscribeToCategories } from '../supabase';
-import { CATEGORIES as DEFAULT_CATEGORIES } from '../data/categories';
 import { getWishlistIds, toggleWishlistItem, subscribeToWishlist } from '../wishlist';
 import { getRecentlyViewedIds, trackProductView, subscribeToRecentlyViewed, getRecentlyViewedProducts } from '../recentlyViewed';
 import { ResponsiveImage } from './ResponsiveImage';
+import { BrandedLoadingScreen } from './BrandedLoadingScreen';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -17,6 +17,8 @@ interface ProductCatalogProps {
   categories?: Category[];
   userProfile?: UserProfile | null;
   onOpenWishlist?: () => void;
+  isLoading?: boolean;
+  onRetry?: () => void;
 }
 
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
@@ -29,6 +31,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   categories: propCategories,
   userProfile,
   onOpenWishlist,
+  isLoading = false,
+  onRetry,
 }) => {
   const [viewMode, setViewMode] = useState<'gift' | 'collector'>('gift');
   const [sortBy, setSortBy] = useState<'popular' | 'price-low' | 'price-high'>('popular');
@@ -85,9 +89,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     }
   }, [maxProductPrice]);
 
-  const [categories, setCategories] = useState<Category[]>(
-    propCategories || DEFAULT_CATEGORIES.map((c, i) => ({ ...c, id: c.id as CategoryId, sortOrder: i + 1 }))
-  );
+  const [categories, setCategories] = useState<Category[]>(propCategories || []);
 
   useEffect(() => {
     if (propCategories && propCategories.length > 0) {
@@ -398,23 +400,35 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         </div>
 
         {/* Products Grid */}
-        {products.length === 0 ? (
-          /* Loading Skeletons while Supabase data is streaming in */
+        {isLoading && products.length === 0 ? (
+          /* Branded Redline Loading Screen with Rotating Hot Wheels Collector Trivia */
+          <BrandedLoadingScreen
+            fullScreen={false}
+            message="Loading Authentic Die-Cast Collection..."
+            submessage="Fetching authentic bouquets, shadowboxes & custom cards from live garage inventory"
+            onRetry={onRetry}
+          />
+        ) : isLoading ? (
+          /* Subtle Shimmer Skeleton Grid matching real card layout during refresh/sync */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <div
                 key={`skeleton-${n}`}
-                className="bg-white border border-zinc-200 rounded-2xl overflow-hidden p-4 space-y-4 animate-pulse shadow-xs"
+                className="bg-white border border-zinc-200 rounded-2xl overflow-hidden p-4 space-y-4 animate-pulse shadow-xs flex flex-col justify-between"
               >
-                <div className="aspect-4/3 bg-zinc-200 rounded-xl"></div>
-                <div className="space-y-2">
-                  <div className="h-3 bg-zinc-200 rounded w-1/3"></div>
-                  <div className="h-4 bg-zinc-200 rounded w-3/4"></div>
+                <div className="aspect-4/3 bg-zinc-100 rounded-xl"></div>
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <div className="h-3 bg-zinc-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-zinc-200 rounded w-1/4"></div>
+                  </div>
+                  <div className="h-5 bg-zinc-200 rounded w-3/4"></div>
                   <div className="h-3 bg-zinc-200 rounded w-1/2"></div>
+                  <div className="h-6 bg-zinc-200 rounded w-1/3 pt-1"></div>
                 </div>
-                <div className="pt-3 border-t border-zinc-100 flex items-center justify-between">
-                  <div className="h-5 bg-zinc-200 rounded w-1/4"></div>
-                  <div className="h-8 bg-zinc-200 rounded-lg w-1/3"></div>
+                <div className="pt-3 border-t border-zinc-100 grid grid-cols-2 gap-2">
+                  <div className="h-10 bg-zinc-200 rounded-xl"></div>
+                  <div className="h-10 bg-zinc-200 rounded-xl"></div>
                 </div>
               </div>
             ))}
@@ -439,141 +453,163 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             {sortedProducts.map((product) => {
               const isWishlisted = wishlistIds.includes(product.id);
               const isOutOfStock = product.stockCount !== undefined && product.stockCount <= 0;
+              const hasDiscount = Boolean(product.originalPrice && product.originalPrice > product.price);
+              const discountPercent = hasDiscount && product.originalPrice
+                ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+                : 0;
 
               return (
                 <div
                   key={product.id}
                   onClick={() => handleProductCardClick(product)}
-                  className="group bg-white border border-zinc-200 hover:border-red-500 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-red-600/10 relative cursor-pointer"
+                  className="group bg-white border border-zinc-200/90 hover:border-red-500/80 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_28px_rgba(220,38,38,0.08),0_4px_12px_rgba(0,0,0,0.04)] hover:-translate-y-1 relative cursor-pointer"
                 >
-                  {/* Badges Overlay */}
-                  <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
-                    <div className="flex items-center gap-1.5">
-                      {product.isBestSeller ? (
-                        <span className="bg-red-600 text-white text-[10px] font-black uppercase font-mono px-2 py-0.5 rounded-md shadow-md">
-                          🔥 Bestseller
+                  {/* Top Header Overlay: Clean Separated Badge Stack & Wishlist Heart */}
+                  <div className="absolute top-3 left-3 right-3 z-10 flex items-start justify-between pointer-events-none gap-2">
+                    
+                    {/* Non-overlapping Stacked Badge Column */}
+                    <div className="flex flex-col items-start gap-1.5 max-w-[70%] pointer-events-auto">
+                      {product.isBestSeller && (
+                        <span className="bg-red-600 text-white text-[10px] font-black uppercase font-mono px-2.5 py-0.5 rounded-md shadow-xs tracking-wider flex items-center gap-1">
+                          <span>🔥</span>
+                          <span>Bestseller</span>
                         </span>
-                      ) : product.isNewRelease ? (
-                        <span className="bg-yellow-400 text-zinc-900 text-[10px] font-black uppercase font-mono px-2 py-0.5 rounded-md shadow-md">
-                          ✨ New Edition
+                      )}
+
+                      {product.isNewRelease && (
+                        <span className="bg-zinc-900 text-amber-400 border border-zinc-700/80 text-[10px] font-black uppercase font-mono px-2.5 py-0.5 rounded-md shadow-xs tracking-wider flex items-center gap-1">
+                          <span>✨</span>
+                          <span>New Edition</span>
                         </span>
-                      ) : null}
+                      )}
 
                       {isOutOfStock ? (
-                        <span className="bg-zinc-900/95 backdrop-blur-md text-zinc-200 border border-zinc-700 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-xs">
+                        <span className="bg-zinc-900/95 backdrop-blur-xs text-zinc-300 border border-zinc-700 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-xs">
                           Sold Out
                         </span>
                       ) : product.stockCount !== undefined && product.stockCount < 5 ? (
-                        <span className="bg-amber-600/95 backdrop-blur-md text-white border border-amber-500 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 animate-pulse">
-                          <span>⚠️ Low Stock: Only {product.stockCount} left</span>
+                        <span className="bg-amber-500 text-zinc-950 font-black text-[10px] font-mono px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 animate-pulse">
+                          <span>⚠️ Only {product.stockCount} left</span>
                         </span>
                       ) : null}
                     </div>
 
-                    {/* Wishlist Heart Toggle Button (Accessible Tap Target) */}
+                    {/* Wishlist Heart Toggle Button (Anchored Top-Right, High-Contrast & Accessible) */}
                     <button
+                      type="button"
                       onClick={(e) => handleToggleWishlist(product.id, e)}
-                      className={`pointer-events-auto p-2 rounded-full backdrop-blur-md transition-all shadow-md min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer ${
+                      className={`pointer-events-auto p-2.5 rounded-full backdrop-blur-md transition-all shadow-sm border min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer ${
                         isWishlisted
-                          ? 'bg-red-600 text-white border border-red-500 scale-105'
-                          : 'bg-white/90 hover:bg-white text-zinc-500 hover:text-red-600 border border-zinc-200'
+                          ? 'bg-red-600 text-white border-red-500 scale-105 shadow-red-600/20'
+                          : 'bg-white/95 hover:bg-white text-zinc-400 hover:text-red-600 border-zinc-200/90 hover:border-red-300'
                       }`}
                       title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
                       aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
                     >
-                      <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-white' : 'hover:fill-red-600'}`} />
+                      <Heart className={`w-4 h-4 transition-colors ${isWishlisted ? 'fill-white text-white' : 'hover:fill-red-600 text-current'}`} />
                     </button>
                   </div>
 
-                  {/* Top Image Container with ResponsiveImage & Progressive Loading */}
-                  <div className="relative aspect-4/3 bg-zinc-100 overflow-hidden flex items-center justify-center">
+                  {/* Top Image Container with Clean Neutral Framing & ResponsiveImage */}
+                  <div className="relative aspect-4/3 bg-gradient-to-b from-zinc-50 to-zinc-100/60 p-3 overflow-hidden flex items-center justify-center border-b border-zinc-100">
                     <ResponsiveImage
                       src={product.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
                       alt={product.name}
                       aspectRatio="4/3"
                       sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, (max-width: 1280px) 30vw, 260px"
-                      className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent pointer-events-none"></div>
 
-                    {/* Quick View Floating Button */}
+                    {/* Quick View Details Floating Button */}
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleProductCardClick(product);
                       }}
-                      className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-md text-zinc-900 hover:bg-red-600 hover:text-white p-2.5 rounded-xl border border-zinc-300 hover:border-red-600 text-xs font-mono flex items-center gap-1.5 transition-all shadow-sm cursor-pointer min-h-[44px] z-10"
+                      className="absolute bottom-2.5 right-2.5 bg-white/95 backdrop-blur-md text-zinc-800 hover:bg-zinc-900 hover:text-white px-2.5 py-1.5 rounded-lg border border-zinc-200 hover:border-zinc-900 text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer z-10"
                       title="Quick View Details"
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Details</span>
                     </button>
                   </div>
 
-                  {/* Product Content */}
-                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4 text-left">
+                  {/* Product Details Content */}
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3.5 text-left">
                     <div className="space-y-2">
-                      {/* Rating & Reviews */}
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1 text-yellow-500">
-                          <Star className="w-3.5 h-3.5 fill-yellow-400" />
-                          <span className="font-bold text-zinc-900">{product.rating}</span>
-                          <span className="text-zinc-500 text-[11px]">({product.reviewsCount})</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-500 uppercase">
-                          {product.collectorSpecs?.scale || '1:64 Scale'}
+                      
+                      {/* Scale / Category & Rating Row */}
+                      <div className="flex items-center justify-between text-xs gap-2">
+                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider truncate">
+                          {product.collectorSpecs?.scale || '1:64 Scale'} • {product.category || 'Die-Cast'}
                         </span>
+
+                        <div className="flex items-center gap-1 shrink-0 font-mono">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                          <span className="font-bold text-zinc-900 text-xs">{product.rating}</span>
+                          <span className="text-zinc-500 text-[10px]">({product.reviewsCount})</span>
+                        </div>
                       </div>
 
-                      {/* Title */}
-                      <h3 className="text-base font-black uppercase italic tracking-tight text-zinc-900 group-hover:text-red-600 transition-colors line-clamp-2 min-h-[2.5rem] leading-snug">
+                      {/* Product Title */}
+                      <h3 className="text-sm sm:text-base font-black uppercase tracking-tight text-zinc-900 group-hover:text-red-600 transition-colors line-clamp-2 min-h-[2.5rem] leading-snug font-sans">
                         {product.name}
                       </h3>
 
-                      {/* Dynamic View Mode Box: Gift Mode vs Collector Mode */}
+                      {/* Dynamic View Mode: Gift Mode vs Collector Specs Mode */}
                       {viewMode === 'gift' ? (
                         <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed font-normal min-h-[2rem]">
                           {product.shortTagline || product.description}
                         </p>
                       ) : (
-                        <div className="bg-zinc-50 rounded-lg p-2.5 text-[11px] font-mono space-y-1 text-zinc-700 border border-zinc-200 min-h-[2rem]">
+                        <div className="bg-zinc-50 rounded-xl p-2.5 text-[11px] font-mono space-y-1 text-zinc-700 border border-zinc-200/80 min-h-[2rem]">
                           <div className="text-red-600 font-bold truncate">
                             🏎️ {product.collectorSpecs?.casting || product.name}
                           </div>
-                          <div className="text-zinc-600 flex justify-between">
+                          <div className="text-zinc-600 flex justify-between text-[10px]">
                             <span>Series: {product.collectorSpecs?.series || 'Showroom'}</span>
                             <span>{product.collectorSpecs?.wheels || 'Real Riders'}</span>
                           </div>
                         </div>
                       )}
 
-                      {/* Price Display */}
-                      <div className="pt-1 flex items-baseline gap-2">
-                        <span className="text-xl font-black text-zinc-900 font-mono">
+                      {/* Clear Price Display with Prominent Current Price & Discount Tag */}
+                      <div className="pt-1 flex items-baseline flex-wrap gap-2">
+                        <span className="text-xl sm:text-2xl font-black text-zinc-900 font-mono tracking-tight">
                           ₹{product.price.toFixed(2)}
                         </span>
-                        {product.originalPrice && (
-                          <span className="text-xs text-zinc-400 line-through font-mono">
-                            ₹{product.originalPrice.toFixed(2)}
+
+                        {hasDiscount && (
+                          <span className="text-xs sm:text-sm text-zinc-400 line-through font-mono">
+                            ₹{product.originalPrice!.toFixed(2)}
                           </span>
                         )}
+
+                        {discountPercent > 0 && (
+                          <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black font-mono px-1.5 py-0.5 rounded-md">
+                            {discountPercent}% OFF
+                          </span>
+                        )}
+
                         {product.requiresPhotoUpload && (
-                          <span className="ml-auto text-[10px] bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded font-mono font-bold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-red-600" /> Custom Photo
+                          <span className="ml-auto text-[10px] bg-zinc-100 text-zinc-700 border border-zinc-200 px-2 py-0.5 rounded-md font-mono font-bold flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-red-600" /> Photo Card
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Dual Action Buttons (Side-by-side: Buy Now + Order on WhatsApp) */}
+                    {/* Dual Action Buttons (Visually Balanced: Primary Buy Now + Secondary Concierge WhatsApp) */}
                     <div className="pt-3 grid grid-cols-2 gap-2 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
                       <button
+                        type="button"
                         onClick={(e) => handleAddToCartWithTrack(product, e)}
                         disabled={isOutOfStock}
-                        className={`font-bold py-3 px-2 rounded-xl text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-1.5 transition-all min-h-[44px] ${
+                        className={`font-bold py-2.5 px-3 rounded-xl text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-1.5 transition-all min-h-[42px] ${
                           isOutOfStock
                             ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
-                            : 'bg-red-600 hover:bg-red-500 text-white active:scale-95 shadow-md shadow-red-600/20 cursor-pointer'
+                            : 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-xs shadow-red-600/20 active:scale-[0.98] cursor-pointer'
                         }`}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
@@ -584,7 +620,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                         href={generateWhatsAppUrl(product)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 font-bold py-3 px-2 rounded-xl text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-1.5 transition-all text-center min-h-[44px] cursor-pointer"
+                        className="bg-zinc-50 hover:bg-emerald-50 text-zinc-800 hover:text-emerald-800 border border-zinc-200 hover:border-emerald-300 font-bold py-2.5 px-3 rounded-xl text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-1.5 transition-all text-center min-h-[42px] cursor-pointer active:scale-[0.98]"
                         title={isOutOfStock ? "Inquire on WhatsApp (Waitlist)" : "Order on WhatsApp Concierge"}
                       >
                         <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
@@ -626,28 +662,28 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   <div
                     key={recent.id}
                     onClick={() => handleProductCardClick(recent)}
-                    className="group bg-zinc-50 hover:bg-white border border-zinc-200 hover:border-red-500 rounded-xl p-2.5 flex flex-col justify-between transition-all shadow-2xs hover:shadow-md cursor-pointer text-left"
+                    className="group bg-white border border-zinc-200/90 hover:border-red-500/80 rounded-xl p-3 flex flex-col justify-between transition-all duration-300 shadow-[0_2px_6px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_rgba(220,38,38,0.08)] hover:-translate-y-0.5 cursor-pointer text-left"
                   >
                     <div>
-                      <div className="rounded-lg overflow-hidden border border-zinc-200 mb-2">
+                      <div className="rounded-lg overflow-hidden bg-gradient-to-b from-zinc-50 to-zinc-100 border border-zinc-100 mb-2.5 p-1">
                         <ResponsiveImage
                           src={recent.image}
                           alt={recent.name}
                           aspectRatio="1/1"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                         />
                       </div>
                       <div className="text-[10px] font-mono text-red-600 font-bold uppercase truncate">
                         {recent.category}
                       </div>
-                      <h4 className="font-bold text-xs text-zinc-900 font-sans line-clamp-1 leading-snug">
+                      <h4 className="font-bold text-xs text-zinc-900 font-sans line-clamp-1 leading-snug group-hover:text-red-600 transition-colors">
                         {recent.name}
                       </h4>
                       <div className="mt-1 flex items-baseline gap-1.5 font-mono">
                         <span className="font-bold text-xs text-zinc-900">
                           ₹{recent.price.toFixed(2)}
                         </span>
-                        {recent.originalPrice && (
+                        {recent.originalPrice && recent.originalPrice > recent.price && (
                           <span className="text-[10px] text-zinc-400 line-through">
                             ₹{recent.originalPrice.toFixed(2)}
                           </span>
@@ -655,18 +691,19 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                       </div>
                     </div>
 
-                    <div className="mt-2.5 pt-2 border-t border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
+                    <div className="mt-2.5 pt-2 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
                       <button
+                        type="button"
                         onClick={(e) => handleAddToCartWithTrack(recent, e)}
                         disabled={isOutOfStock}
-                        className={`w-full font-mono text-[10px] font-bold uppercase py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition min-h-[32px] ${
+                        className={`w-full font-mono text-[11px] font-bold uppercase py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all min-h-[36px] ${
                           isOutOfStock
-                            ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
-                            : 'bg-red-600 hover:bg-red-500 text-white shadow-2xs cursor-pointer'
+                            ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
+                            : 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-xs cursor-pointer'
                         }`}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        <span>{isOutOfStock ? 'Sold Out' : 'Buy'}</span>
+                        <span>{isOutOfStock ? 'Sold Out' : 'Buy Now'}</span>
                       </button>
                     </div>
                   </div>

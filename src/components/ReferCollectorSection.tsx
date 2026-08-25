@@ -41,7 +41,7 @@ export const ReferCollectorSection: React.FC<ReferCollectorSectionProps> = ({
   }, [userProfile]);
 
   const referralCode = referralCodeObj?.code || 'GARAGE10';
-  const referralLink = typeof window !== 'undefined' ? `${window.location.origin}/?ref=${referralCode}` : `https://redlinegarage.in/?ref=${referralCode}`;
+  const referralLink = typeof window !== 'undefined' ? `${window.location.origin}/?ref=${referralCode}` : `https://redlinegarage.store/?ref=${referralCode}`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(referralLink);

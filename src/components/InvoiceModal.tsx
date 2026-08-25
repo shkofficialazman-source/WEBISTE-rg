@@ -144,7 +144,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
               </div>
               <div className="font-bold text-sm text-zinc-900 font-sans">Redline Garage Studio</div>
               <div className="text-zinc-600">Support: WhatsApp & UPI Verified</div>
-              <div className="text-zinc-600">Web: redlinegarage.shop</div>
+              <div className="text-zinc-600">Web: redlinegarage.store</div>
               <div className="text-zinc-600 pt-1 border-t border-zinc-200/60 mt-1">
                 Payment: <strong className="text-zinc-900">{order.paymentMethod || 'UPI / WhatsApp Pay'}</strong>
               </div>

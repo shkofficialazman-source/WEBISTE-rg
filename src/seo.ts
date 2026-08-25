@@ -1,6 +1,6 @@
 import { Product } from './types';
 import { FAQS } from './data/extraData';
-import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME, BRAND_TAGLINE } from './brandAssets';
+import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME, BRAND_TAGLINE, BRAND_SITE_URL } from './brandAssets';
 
 export type PageType = 
   | 'home' 
@@ -26,7 +26,9 @@ export interface SEOConfig {
 const DEFAULT_TITLE = 'Redline Garage | Buy Authentic Hot Wheels Online in India — Collector Cars, Gifts & Bouquets';
 const DEFAULT_DESCRIPTION = 'Buy 100% authentic Hot Wheels, custom photo blister cards, luxury die-cast bouquets & acrylic frames online in India. Fast nationwide shipping from Mangalore.';
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?q=80&w=1200&auto=format&fit=crop';
-const BASE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'https://redlinegarage.in';
+const BASE_ORIGIN = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('run.app')
+  ? window.location.origin 
+  : BRAND_SITE_URL;
 
 /**
  * Generates page-specific titles matching SEO standards
@@ -236,8 +238,8 @@ export const updateSEO = (config: SEOConfig) => {
       },
     ],
     sameAs: [
-      'https://www.instagram.com/redlinegarage',
-      'https://wa.me/8431294886',
+      BRAND_ASSETS.storeContact.instagramUrl,
+      `https://wa.me/${BRAND_ASSETS.storeContact.whatsappNumber}`,
     ],
   };
 
@@ -246,14 +248,14 @@ export const updateSEO = (config: SEOConfig) => {
     '@type': 'WebSite',
     '@id': `${siteUrl}/#website`,
     url: siteUrl,
-    name: 'Redline Garage — Hot Wheels & Die-Cast Collector Store',
+    name: `${BRAND_NAME} — Hot Wheels & Die-Cast Collector Store`,
     description: DEFAULT_DESCRIPTION,
     publisher: {
       '@id': `${siteUrl}/#organization`,
     },
     potentialAction: {
       '@type': 'SearchAction',
-      target: `${siteUrl}/#catalog?search={search_term_string}`,
+      target: `${siteUrl}/?search={search_term_string}`,
       'query-input': 'required name=search_term_string',
     },
   };

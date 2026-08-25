@@ -476,6 +476,188 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
     }
   });
 
+  // Server-side Gemini API handler for "Ask AI Pit Crew" multi-turn chatbot
+  const handlePitCrewChat = async (req: express.Request, res: express.Response) => {
+    const chatStartTime = Date.now();
+    try {
+      const { messages = [], crewMember = 'turbo', userQuery } = req.body;
+
+      // Extract current user message if not already in messages array
+      let conversationHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+      if (Array.isArray(messages) && messages.length > 0) {
+        conversationHistory = messages.map((msg: any) => {
+          const role: 'user' | 'model' = (msg.role === 'assistant' || msg.role === 'model') ? 'model' : 'user';
+          const text = String(msg.content || msg.text || (Array.isArray(msg.parts) ? msg.parts[0]?.text : '') || '');
+          return {
+            role,
+            parts: [{ text }],
+          };
+        }).filter((msg) => msg.parts[0].text.trim().length > 0);
+      }
+
+      if (userQuery && (!conversationHistory.length || conversationHistory[conversationHistory.length - 1].role !== 'user')) {
+        conversationHistory.push({
+          role: 'user',
+          parts: [{ text: String(userQuery) }],
+        });
+      }
+
+      if (conversationHistory.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No message provided. Please send a query or conversation history.',
+        });
+      }
+
+      // Persona instructions
+      const systemInstruction = `You are part of the official "AI Pit Crew" at Redline Garage (https://redlinegarage.store) — India's premier online store for authentic Hot Wheels bouquets, acrylic shadowbox frames, custom photo blister cards, and rare die-cast collectibles.
+Store Location: Mangalore, Karnataka, India.
+Shipping: Fast 2-5 days nationwide delivery (Bangalore, Mumbai, Delhi, Hyderabad, Chennai, and all Indian PIN codes) via BlueDart/DTDC/Delhivery. Free premium gift wrapping on orders.
+Payments: UPI (GPay, PhonePe, Paytm), Cards, NetBanking, and Cash on Delivery (COD).
+WhatsApp Concierge: +91 8431294886
+Active Coupon Codes: "GARAGE10" for 10% OFF, "TURBO15" for 15% OFF first order.
+
+Current Pit Crew Persona in Character:
+${
+  crewMember === 'sparky'
+    ? `You are Sparky "The Die-Cast Sage" 🔍🏆
+- Personality: Passionate, ultra-knowledgeable Hot Wheels veteran collector and casting historian.
+- Expertise: Identifying Super Treasure Hunts ($TH - Spectraflame paint, Real Riders rubber wheels, "TH" logo), Regular Treasure Hunts (circle flame), Red Line Club (RLC), Car Culture, error cards, short cards vs long cards, case codes (A-Q cases), and collector market valuations in Indian Rupees (₹).
+- Tone: Enthusiastic, authentic collector terminology, sharp, and helpful.`
+    : crewMember === 'gearbox'
+    ? `You are Gearbox "The Custom Gift Engineer" 🛠️📐
+- Personality: Precise, creative packaging artist and custom fabrication specialist.
+- Expertise: Designing personalized Hot Wheels blister cards (350 GSM high-gloss cardstock, crystal blister bubble, custom photo & driver name), shadowbox acrylic wall frames (museum-grade blueprint art, shatterproof acrylic), custom anniversary & birthday editions.
+- Tone: Friendly, creative, reassuring, and step-by-step instructional.`
+    : `You are Turbo "The Pit Mascot" 🏎️🐾
+- Personality: Super enthusiastic, friendly, lovable mascot and lead concierge of Redline Garage.
+- Expertise: Helping customers find the perfect gift for boyfriends, husbands, car-loving friends, or kids; recommending bestselling Hot Wheels bouquets (Midnight Supercars ₹1,999, Ferrari Apex ₹2,299, Fast & Furious ₹2,499 with LED lights); explaining shipping, packaging, and coupon codes.
+- Tone: Warm, cheerful, welcoming, fun racing metaphors (revving up, checkered flag, pit stop, full throttle) and emojis.`
+}
+
+Key Product Catalog Guidelines:
+- Hot Wheels Bouquets (₹1,499 - ₹2,799): 5 to 7 mint official Hot Wheels cars, warm LED fairy lights, luxury satin wrapper, arrives pre-assembled and gift-ready.
+- Shadowbox Frames (₹1,899 - ₹3,499): Skyline GT-R Heritage, Porsche 911 Lineage, Lamborghini V12 Evolution with blueprints & authentic castings.
+- Custom Photo Blister Cards (₹799 - ₹1,299): Turn personal photos into real Mattel-style blister packaging with custom driver names.
+- Scale Model Sets (₹2,199 - ₹4,999): 1:64 scale collector die-cast cars with opening hoods, rubber Real Riders tires.
+- Free AI Tools on Site: "AI Value Scanner" (scan any Hot Wheels photo for instant rarity/valuation appraisal) & "Custom Card Builder" (AI manga/comic stylizer).
+
+Format Guidelines:
+- Keep answers engaging, concise (2-4 brief paragraphs or clean bullet points), easy to read on mobile.
+- Mention prices in Indian Rupees (₹) when relevant.
+- Use bolding and markdown formatting for readability.
+- If relevant, suggest actionable next steps (e.g. check the Catalog, try the Custom Builder, or WhatsApp the garage).`;
+
+      const { key: apiKey } = getGeminiApiKey();
+
+      // If no API key is available, use high-fidelity rule-based Pit Crew response engine
+      if (!apiKey) {
+        const lastUserText = conversationHistory[conversationHistory.length - 1]?.parts[0]?.text?.toLowerCase() || '';
+        let fallbackResponse = '';
+
+        if (lastUserText.includes('gift') || lastUserText.includes('boyfriend') || lastUserText.includes('husband') || lastUserText.includes('birthday') || lastUserText.includes('anniversary')) {
+          fallbackResponse = `🏎️💨 **Turbo's Top Gift Picks!**\n\nLooking for an unforgettable gift? Here are our top 3 community favorites:\n\n1. 💐 **Midnight Supercars Bouquet (₹1,999)**: Features 6 authentic Hot Wheels supercars nestled in luxury carbon-wrap with warm ambient LED fairy lights!\n2. 📸 **Custom Photo Blister Card (₹999)**: Mount their photo right onto an official-style Hot Wheels card with their custom driver name and a sealed die-cast car!\n3. 🖼️ **Skyline GT-R Heritage Shadowbox Frame (₹2,499)**: Sleek wall art featuring technical blueprint graphics and mint castings.\n\n*Pro-tip: Use code **TURBO15** at checkout for 15% OFF your first order!*`;
+        } else if (lastUserText.includes('treasure hunt') || lastUserText.includes('sth') || lastUserText.includes('$th') || lastUserText.includes('rarity') || lastUserText.includes('value') || lastUserText.includes('worth')) {
+          fallbackResponse = `🔍 **Sparky's Guide to Super Treasure Hunts ($TH)!**\n\nHere is how to identify an authentic $TH in the wild:\n\n- ✨ **Spectraflame Paint**: Deep candy metallic gloss finish that shines under light.\n- 🛞 **Real Riders Wheels**: Authentic 2-piece rubber tires with tread pattern and detailed rims.\n- 🏷️ **The "TH" Tampo**: Look for the stylized "TH" graphic placed subtly on the car body.\n- 🪙 **Gold Flame on Card**: A golden circle flame logo printed on the blister card right behind the car.\n\n*Try our free **AI Value Scanner** on the home page to snap a photo and appraise your cars instantly!*`;
+        } else if (lastUserText.includes('custom') || lastUserText.includes('photo') || lastUserText.includes('builder') || lastUserText.includes('card')) {
+          fallbackResponse = `🛠️ **Gearbox's Custom Card Specs:**\n\nMaking a personalized Hot Wheels card is super simple:\n\n1. **High-Res Cardstock**: We print on premium 350 GSM glossy cardstock with crisp color fidelity.\n2. **AI Comic/Manga Stylizer**: Use our built-in builder to transform your photo into dynamic comic racing art, or keep the original photo.\n3. **Real Sealed Casting**: We securely mount an authentic mint Hot Wheels car in a crystal blister bubble.\n\n*Head over to the **Custom Builder** tab or message our WhatsApp concierge at **+91 8431294886** to start!*`;
+        } else if (lastUserText.includes('shipping') || lastUserText.includes('delivery') || lastUserText.includes('cod') || lastUserText.includes('track')) {
+          fallbackResponse = `⚡ **Fast Nationwide Dispatch:**\n\n- **Dispatch**: Orders are carefully bubble-wrapped in heavy-duty 5-ply boxes and dispatched within **24-48 hours** from Mangalore.\n- **Delivery Times**: 2-4 days for South India (Bangalore, Chennai, Hyderabad) and 3-5 days for Mumbai, Delhi, and pan-India.\n- **Payment Options**: UPI, Credit/Debit Cards, NetBanking, and **Cash on Delivery (COD)**.\n\n*You can track your live shipment anytime via the **Track Orders** button in the top menu!*`;
+        } else {
+          fallbackResponse = `🏁 **Vrooom! Welcome to Redline Garage AI Pit Crew!**\n\nI'm **${
+            crewMember === 'sparky' ? 'Sparky, your Die-Cast Sage' : crewMember === 'gearbox' ? 'Gearbox, your Custom Builder Specialist' : 'Turbo, your Pit Mascot'
+          }**!\n\nHow can our crew help your collection today?\n- 🎁 **Gift Ideas**: Bouquets, Frames & Sets under ₹2,000\n- 🔍 **Rarity Checks**: Spotting $TH, Treasure Hunts & Collector values\n- 🛠️ **Custom Cards**: Adding your photo to custom blister packaging\n- 📦 **Shipping & Delivery**: Express pan-India transit info\n\n*Feel free to ask me anything or use coupon code **GARAGE10** for 10% OFF!*`;
+        }
+
+        return res.json({
+          success: true,
+          isAiLive: false,
+          modelUsed: 'pit-crew-local-engine',
+          elapsedMs: Date.now() - chatStartTime,
+          reply: fallbackResponse,
+          message: {
+            role: 'assistant',
+            content: fallbackResponse,
+          },
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      // Model cascade for conversational chatbot: gemini-3.5-flash -> gemini-3.7-flash -> gemini-3.1-flash-lite
+      const modelsToTry = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+      let modelReplyText = '';
+      let modelUsed = '';
+      let lastErrMessage = '';
+
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: conversationHistory,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+              maxOutputTokens: 800,
+            },
+          });
+
+          if (response.text && response.text.trim().length > 0) {
+            modelReplyText = response.text.trim();
+            modelUsed = modelName;
+            break;
+          }
+        } catch (err: any) {
+          console.warn(`[PitCrew Chat] Model ${modelName} call failed:`, err?.message || err);
+          lastErrMessage = err?.message || String(err);
+        }
+      }
+
+      if (!modelReplyText) {
+        return res.json({
+          success: true,
+          isAiLive: false,
+          modelUsed: 'pit-crew-fallback',
+          errorNotice: lastErrMessage,
+          reply: `🏎️ **Turbo here!** Pit stop check — our live radio signal had a momentary glitch, but our garage is fully open! \n\nYou can explore our **Bouquets, Frames, and Custom Cards** right on the shop page, or connect with our human crew on WhatsApp at **+91 8431294886** for instant assistance! 🏁`,
+          message: {
+            role: 'assistant',
+            content: `🏎️ **Turbo here!** Pit stop check — our live radio signal had a momentary glitch, but our garage is fully open! \n\nYou can explore our **Bouquets, Frames, and Custom Cards** right on the shop page, or connect with our human crew on WhatsApp at **+91 8431294886** for instant assistance! 🏁`,
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        isAiLive: true,
+        modelUsed,
+        elapsedMs: Date.now() - chatStartTime,
+        reply: modelReplyText,
+        message: {
+          role: 'assistant',
+          content: modelReplyText,
+        },
+      });
+    } catch (topErr: any) {
+      console.error('[PitCrew Chat Server Exception]', topErr);
+      return res.status(500).json({
+        success: false,
+        error: topErr?.message || 'Internal server error in Pit Crew chat.',
+      });
+    }
+  };
+
+  app.post('/api/gemini/pit-crew-chat', handlePitCrewChat);
+  app.post('/api/gemini/chat', handlePitCrewChat);
+
   // Comprehensive System Diagnostics Endpoint for Gemini API & Deployment Verification
   app.get('/api/diagnostics/gemini', async (req, res) => {
     const { key: apiKey, source: apiKeySource } = getGeminiApiKey();
@@ -738,27 +920,20 @@ Keep answers concise, well-structured, energetic, and formatted cleanly with mar
   // Dynamic /sitemap.xml Generation Endpoint
   app.get('/sitemap.xml', async (req, res) => {
     try {
-      const BASE_URL = 'https://redlinegarage.in';
+      const BASE_URL = 'https://redlinegarage.store';
       const today = new Date().toISOString().split('T')[0];
 
-      // Static and main section routes
+      // Clean crawlable public storefront URLs (Googlebot strictly forbids URL hash fragments in sitemaps)
       const staticUrls = [
         { loc: `${BASE_URL}/`, changefreq: 'daily', priority: '1.0' },
-        { loc: `${BASE_URL}/#catalog`, changefreq: 'daily', priority: '0.9' },
-        { loc: `${BASE_URL}/#categories`, changefreq: 'weekly', priority: '0.9' },
-        { loc: `${BASE_URL}/#scanner`, changefreq: 'weekly', priority: '0.85' },
-        { loc: `${BASE_URL}/#custom-builder`, changefreq: 'weekly', priority: '0.85' },
-        { loc: `${BASE_URL}/#why-us`, changefreq: 'monthly', priority: '0.7' },
-        { loc: `${BASE_URL}/#gallery`, changefreq: 'weekly', priority: '0.7' },
-        { loc: `${BASE_URL}/#faq`, changefreq: 'weekly', priority: '0.7' },
       ];
 
-      // Categories
+      // Categories (query parameter routes supported by the storefront router)
       const categorySlugs = ['bouquets', 'frames', 'custom-cards', 'scale-models'];
       const categoryUrls = categorySlugs.map((slug) => ({
         loc: `${BASE_URL}/?category=${slug}`,
         changefreq: 'weekly',
-        priority: '0.8',
+        priority: '0.85',
       }));
 
       // Known collector and flagship products
@@ -811,10 +986,10 @@ ${allUrls
     const robotsTxt = `User-agent: *
 Allow: /
 Disallow: /admin
-Disallow: /admin/*
+Disallow: /admin-login
 Disallow: /api/
 
-Sitemap: https://redlinegarage.in/sitemap.xml
+Sitemap: https://redlinegarage.store/sitemap.xml
 `;
     res.header('Content-Type', 'text/plain');
     res.header('Cache-Control', 'public, max-age=86400');

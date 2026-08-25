@@ -22,21 +22,21 @@ export const TestimonialsSection: React.FC = () => {
         </div>
 
         {/* Testimonials Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
           {TESTIMONIALS.map((t) => (
             <div
               key={t.id}
-              className="bg-white border border-zinc-200 rounded-2xl p-6 text-left space-y-4 flex flex-col justify-between hover:border-red-500/60 transition-all shadow-sm"
+              className="bg-white border border-zinc-200/90 hover:border-red-500/80 rounded-2xl p-6 text-left space-y-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_28px_rgba(220,38,38,0.08)]"
             >
               <div className="space-y-3">
                 {/* Stars & Quote Icon */}
                 <div className="flex items-center justify-between">
-                  <div className="flex text-yellow-400 gap-1">
+                  <div className="flex text-amber-400 gap-1">
                     {[...Array(t.rating)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-yellow-400" />
+                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-500" />
                     ))}
                   </div>
-                  <Quote className="w-6 h-6 text-red-600/30" />
+                  <Quote className="w-6 h-6 text-red-600/20" />
                 </div>
 
                 {/* Comment */}

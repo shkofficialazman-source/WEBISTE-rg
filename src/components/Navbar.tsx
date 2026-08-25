@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles, Trophy, User, LogOut, Package, ChevronDown, Heart } from 'lucide-react';
-import { UserProfile } from '../types';
+import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles, Trophy, User, LogOut, Package, ChevronDown, Heart, Bot } from 'lucide-react';
+import { UserProfile, PitCrewRole } from '../types';
 import { getWishlistIds, subscribeToWishlist } from '../wishlist';
 import { RedlineLogo } from './RedlineLogo';
 
@@ -16,6 +16,7 @@ interface NavbarProps {
   onOpenMyOrders?: () => void;
   onCustomerLogout?: () => void;
   onOpenWishlist?: () => void;
+  onOpenPitCrew?: (role?: PitCrewRole) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenMyOrders,
   onCustomerLogout,
   onOpenWishlist,
+  onOpenPitCrew,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -85,6 +87,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
           >
             Shop All
+          </button>
+          <button 
+            onClick={() => {
+              if (onOpenPitCrew) {
+                onOpenPitCrew('turbo');
+              } else {
+                handleNavClick('pit-crew');
+              }
+            }} 
+            className="hover:text-amber-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer flex items-center gap-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1 rounded-full shadow-xs"
+          >
+            <span className="text-xs">🏎️🐾</span>
+            <span>AI Pit Crew</span>
           </button>
           <button 
             onClick={() => handleNavClick('scanner')} 
@@ -294,6 +309,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="text-left text-zinc-800 hover:text-red-600 py-1"
             >
               Shop Catalog
+            </button>
+            <button 
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                if (onOpenPitCrew) {
+                  onOpenPitCrew('turbo');
+                } else {
+                  handleNavClick('pit-crew');
+                }
+              }} 
+              className="text-left text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-3 py-2 rounded-xl font-bold flex items-center justify-between shadow-xs"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-base">🏎️🐾</span>
+                <span>Ask AI Pit Crew</span>
+              </span>
+              <span className="text-[10px] bg-red-600 text-white font-mono uppercase px-2 py-0.5 rounded-full font-bold">
+                Chat Live
+              </span>
             </button>
             <button 
               onClick={() => handleNavClick('scanner')} 

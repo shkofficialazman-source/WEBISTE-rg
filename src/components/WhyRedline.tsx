@@ -48,7 +48,7 @@ export const WhyRedline: React.FC = () => {
           {pillars.map((pillar, idx) => (
             <div
               key={idx}
-              className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 text-left space-y-4 hover:border-red-500/60 transition-all duration-300 hover:-translate-y-1 shadow-sm"
+              className="bg-zinc-50 border border-zinc-200/90 rounded-2xl p-6 text-left space-y-4 hover:border-red-500/80 transition-all duration-300 hover:-translate-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.03)]"
             >
               <div className="w-12 h-12 rounded-xl bg-white border border-zinc-200 flex items-center justify-center shadow-xs">
                 {pillar.icon}
@@ -74,7 +74,7 @@ export const WhyRedline: React.FC = () => {
           </div>
           <div>
             <div className="text-3xl sm:text-4xl font-black font-mono text-zinc-900 flex items-center justify-center gap-1">
-              4.9/5 <Star className="w-6 h-6 fill-yellow-400 text-yellow-400" />
+              4.9/5 <Star className="w-6 h-6 fill-amber-400 text-amber-500" />
             </div>
             <div className="text-xs text-zinc-600 uppercase font-mono mt-1 font-medium">500+ Verified Customer Reviews</div>
           </div>

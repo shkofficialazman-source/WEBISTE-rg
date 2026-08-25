@@ -17,6 +17,8 @@ export interface BrandAssetsConfig {
   readonly brandName: string;
   readonly brandShortName: string;
   readonly tagline: string;
+  readonly domain: string;
+  readonly siteUrl: string;
   readonly storeContact: {
     readonly phone: string;
     readonly whatsapp: string;
@@ -47,6 +49,8 @@ export const BRAND_ASSETS: BrandAssetsConfig = {
   brandName: 'Redline Garage',
   brandShortName: 'Redline',
   tagline: 'Premium Hot Wheels Gifts & Wall Art',
+  domain: 'redlinegarage.store',
+  siteUrl: 'https://redlinegarage.store',
   storeContact: {
     phone: '+91 8431294886',
     whatsapp: '+91 8431294886',
@@ -65,3 +69,5 @@ export const BRAND_FAVICON_PATH = BRAND_ASSETS.favicon.src;
 export const BRAND_LOGO_ALT = BRAND_ASSETS.logo.alt;
 export const BRAND_NAME = BRAND_ASSETS.brandName;
 export const BRAND_TAGLINE = BRAND_ASSETS.tagline;
+export const BRAND_DOMAIN = BRAND_ASSETS.domain;
+export const BRAND_SITE_URL = BRAND_ASSETS.siteUrl;

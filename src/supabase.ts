@@ -1013,19 +1013,11 @@ export const fetchCategoriesFromSupabase = async (): Promise<Category[]> => {
 
     if (error) {
       console.warn('Supabase fetch categories notice:', error.message);
-      return DEFAULT_CATEGORIES.map((c, i) => ({
-        ...c,
-        id: c.id as CategoryId,
-        sortOrder: i + 1,
-      }));
+      return [];
     }
 
     if (!data || data.length === 0) {
-      return DEFAULT_CATEGORIES.map((c, i) => ({
-        ...c,
-        id: c.id as CategoryId,
-        sortOrder: i + 1,
-      }));
+      return [];
     }
 
     return data.map((item: any) => ({
@@ -1039,11 +1031,7 @@ export const fetchCategoriesFromSupabase = async (): Promise<Category[]> => {
     }));
   } catch (err) {
     console.warn('Supabase fetch categories error:', err);
-    return DEFAULT_CATEGORIES.map((c, i) => ({
-      ...c,
-      id: c.id as CategoryId,
-      sortOrder: i + 1,
-    }));
+    return [];
   }
 };
 
