@@ -60,15 +60,35 @@ export const subscribeToRecentlyViewed = (callback: RecentlyViewedListener): (()
   };
 };
 
-export const getRecentlyViewedProducts = (allProducts: Product[]): Product[] => {
-  const ids = getRecentlyViewedIds();
-  if (ids.length === 0 || allProducts.length === 0) return [];
+export const clearRecentlyViewed = () => {
+  try {
+    sessionStorage.removeItem(RECENTLY_VIEWED_STORAGE_KEY);
+    localStorage.removeItem(RECENTLY_VIEWED_STORAGE_KEY);
+    listeners.forEach((fn) => fn([]));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(RECENTLY_VIEWED_EVENT, { detail: [] }));
+    }
+  } catch (err) {
+    console.warn('Failed to clear recently viewed:', err);
+  }
+};
+
+export const getRecentlyViewedProducts = (
+  allProducts: Product[],
+  currentProductIdOrIds?: string | string[]
+): Product[] => {
+  const ids = Array.isArray(currentProductIdOrIds)
+    ? currentProductIdOrIds
+    : getRecentlyViewedIds();
+  
+  if (!ids || ids.length === 0 || allProducts.length === 0) return [];
   
   const map = new Map<string, Product>();
   allProducts.forEach((p) => map.set(p.id, p));
 
   const result: Product[] = [];
   ids.forEach((id) => {
+    if (typeof currentProductIdOrIds === 'string' && id === currentProductIdOrIds) return;
     const found = map.get(id);
     if (found) result.push(found);
   });

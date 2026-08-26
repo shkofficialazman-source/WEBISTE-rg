@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LoyaltySettings, LoyaltyAccount } from '../../types';
+import { supabase } from '../../supabase';
 import {
   fetchLoyaltySettings,
   saveLoyaltySettings,
@@ -20,7 +21,71 @@ import {
   Plus,
   IndianRupee,
   Gift,
+  Loader2,
+  Copy,
+  ExternalLink,
+  Database,
 } from 'lucide-react';
+
+const LOYALTY_SQL = `-- CREATE loyalty_accounts & store_settings TABLES & RLS POLICIES
+CREATE TABLE IF NOT EXISTS public.loyalty_accounts (
+    id BIGSERIAL PRIMARY KEY,
+    phone TEXT NOT NULL UNIQUE,
+    email TEXT,
+    user_id TEXT,
+    customer_name TEXT NOT NULL DEFAULT 'Hot Wheels Collector',
+    points_balance INTEGER NOT NULL DEFAULT 0,
+    lifetime_earned INTEGER NOT NULL DEFAULT 0,
+    lifetime_redeemed INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_accounts_phone ON public.loyalty_accounts (phone);
+CREATE INDEX IF NOT EXISTS idx_loyalty_accounts_email ON public.loyalty_accounts (email);
+CREATE INDEX IF NOT EXISTS idx_loyalty_accounts_user_id ON public.loyalty_accounts (user_id);
+
+ALTER TABLE public.loyalty_accounts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select loyalty_accounts" ON public.loyalty_accounts;
+DROP POLICY IF EXISTS "Allow public insert loyalty_accounts" ON public.loyalty_accounts;
+DROP POLICY IF EXISTS "Allow public update loyalty_accounts" ON public.loyalty_accounts;
+DROP POLICY IF EXISTS "Allow public delete loyalty_accounts" ON public.loyalty_accounts;
+
+CREATE POLICY "Allow public select loyalty_accounts" ON public.loyalty_accounts FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow public insert loyalty_accounts" ON public.loyalty_accounts FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow public update loyalty_accounts" ON public.loyalty_accounts FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete loyalty_accounts" ON public.loyalty_accounts FOR DELETE TO anon, authenticated USING (true);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.loyalty_accounts;
+
+
+CREATE TABLE IF NOT EXISTS public.store_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select store_settings" ON public.store_settings;
+DROP POLICY IF EXISTS "Allow public insert store_settings" ON public.store_settings;
+DROP POLICY IF EXISTS "Allow public update store_settings" ON public.store_settings;
+DROP POLICY IF EXISTS "Allow public delete store_settings" ON public.store_settings;
+
+CREATE POLICY "Allow public select store_settings" ON public.store_settings FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow public insert store_settings" ON public.store_settings FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow public update store_settings" ON public.store_settings FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete store_settings" ON public.store_settings FOR DELETE TO anon, authenticated USING (true);
+
+INSERT INTO public.store_settings (key, value, updated_at)
+VALUES (
+    'loyalty_settings',
+    '{"earnRateRupees": 10, "redeemPointValue": 0.5, "minPointsToRedeem": 50, "welcomeBonusPoints": 20, "referralBonusPoints": 30, "loyaltyEnabled": true}'::jsonb,
+    NOW()
+) ON CONFLICT (key) DO NOTHING;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.store_settings;`;
 
 export const LoyaltySettingsTab: React.FC = () => {
   const [settings, setSettings] = useState<LoyaltySettings>({
@@ -38,6 +103,8 @@ export const LoyaltySettingsTab: React.FC = () => {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [tableExists, setTableExists] = useState<boolean | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Bonus Points Modal
   const [bonusModalAccount, setBonusModalAccount] = useState<LoyaltyAccount | null>(null);
@@ -45,9 +112,23 @@ export const LoyaltySettingsTab: React.FC = () => {
   const [bonusReason, setBonusReason] = useState('Admin Appreciation Bonus');
   const [isAwardingBonus, setIsAwardingBonus] = useState(false);
 
+  const checkTableStatus = async () => {
+    try {
+      const { error } = await supabase.from('loyalty_accounts').select('id').limit(1);
+      if (error && (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache'))) {
+        setTableExists(false);
+      } else {
+        setTableExists(true);
+      }
+    } catch {
+      setTableExists(false);
+    }
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     try {
+      await checkTableStatus();
       const [fetchedSettings, fetchedAccounts] = await Promise.all([
         fetchLoyaltySettings(),
         fetchAllLoyaltyAccounts(),
@@ -66,6 +147,12 @@ export const LoyaltySettingsTab: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleCopyMigrationSql = () => {
+    navigator.clipboard.writeText(LOYALTY_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 4000);
+  };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,6 +272,50 @@ export const LoyaltySettingsTab: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Supabase Schema Status & Setup Banner */}
+      {tableExists === false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-xs font-mono space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+              <Database className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Supabase Database Notice: `loyalty_accounts` & `store_settings` Tables Pending Creation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyMigrationSql}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copiedSql ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'SQL Copied!' : 'Copy SQL Migration'}</span>
+              </button>
+              <a
+                href="https://supabase.com/dashboard/project/bmuccamypbfrrhealjgq/sql/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open SQL Editor</span>
+              </a>
+            </div>
+          </div>
+          <p className="text-amber-800 leading-relaxed text-[11px]">
+            Loyalty point balances and rules are currently stored in local browser cache. To enable cross-device synchronization and automatic point accumulation across orders, run the migration script in Supabase SQL Editor.
+          </p>
+        </div>
+      )}
+
+      {tableExists === true && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-xs font-mono text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="font-bold">Supabase PostgreSQL Connected: `public.loyalty_accounts` & `store_settings` Active</span>
+          </div>
+          <span className="text-[10px] text-emerald-600 hidden sm:inline">Row Level Security Enabled</span>
+        </div>
+      )}
 
       {/* Messages */}
       {saveError && (
@@ -315,8 +446,17 @@ export const LoyaltySettingsTab: React.FC = () => {
               disabled={isSavingSettings}
               className="bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50 min-h-[40px]"
             >
-              <Save className="w-4 h-4" />
-              <span>{isSavingSettings ? 'Saving Settings...' : 'Save Loyalty Rules'}</span>
+              {isSavingSettings ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving to Database...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Loyalty Rules</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -465,9 +605,16 @@ export const LoyaltySettingsTab: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isAwardingBonus}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {isAwardingBonus ? 'Awarding...' : 'Confirm Points'}
+                  {isAwardingBonus ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Awarding...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Points</span>
+                  )}
                 </button>
               </div>
             </form>

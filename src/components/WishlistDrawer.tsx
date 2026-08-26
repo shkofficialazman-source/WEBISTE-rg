@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Product, UserProfile } from '../types';
 import { getWishlistIds, toggleWishlistItem, subscribeToWishlist } from '../wishlist';
 import { trackProductView } from '../recentlyViewed';
@@ -49,8 +50,26 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm animate-fade-in flex justify-end">
-      <div className="w-full max-w-md bg-white text-zinc-900 h-full max-h-[100dvh] border-l border-zinc-200 flex flex-col justify-between shadow-2xl relative">
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+        {/* iOS backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs"
+        />
+
+        {/* iOS Slide-in Panel */}
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300, mass: 0.8 }}
+          className="w-full max-w-md bg-white text-zinc-900 h-full max-h-[100dvh] border-l border-zinc-200 flex flex-col justify-between shadow-2xl relative z-10"
+        >
         
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 shrink-0">
@@ -212,7 +231,8 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
             </button>
           </div>
         )}
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 };

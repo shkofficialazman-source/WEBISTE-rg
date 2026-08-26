@@ -433,6 +433,8 @@ export const saveOrderToSupabase = async (orderData: {
   shipping: number;
   total: number;
   paymentMethod: string;
+  paymentScreenshotUrl?: string;
+  aiVerification?: any;
   giftNote?: string;
   referralCode?: string;
   referralDiscount?: number;
@@ -469,6 +471,8 @@ export const saveOrderToSupabase = async (orderData: {
     shipping: Number(orderData.shipping || 0),
     total: Number(orderData.total || 0),
     paymentMethod: orderData.paymentMethod || 'WhatsApp',
+    paymentScreenshotUrl: orderData.paymentScreenshotUrl,
+    aiVerification: orderData.aiVerification,
     giftNote: orderData.giftNote,
     status: 'pending',
     referralCode: orderData.referralCode,
@@ -536,6 +540,8 @@ export const saveOrderToSupabase = async (orderData: {
       shipping: Number(orderData.shipping || 0),
       total: Number(orderData.total || 0),
       payment_method: orderData.paymentMethod || 'WhatsApp',
+      payment_screenshot_url: orderData.paymentScreenshotUrl || null,
+      ai_verification: orderData.aiVerification || null,
       gift_note: orderData.giftNote || null,
       status: 'pending',
       referral_code: orderData.referralCode || null,
@@ -604,6 +610,8 @@ export const fetchOrdersFromSupabase = async (): Promise<FirestoreOrder[]> => {
       shipping: Number(item.shipping || 0),
       total: Number(item.total || 0),
       paymentMethod: item.payment_method || item.paymentMethod || 'WhatsApp / COD',
+      paymentScreenshotUrl: item.payment_screenshot_url || item.paymentScreenshotUrl || undefined,
+      aiVerification: item.ai_verification || item.aiVerification || undefined,
       giftNote: item.gift_note || item.giftNote || undefined,
       status: (item.status as OrderStatus) || 'pending',
       referralCode: item.referral_code || item.referralCode || undefined,
@@ -938,6 +946,126 @@ export const updateOrderTrackingInSupabase = async (
   } catch (err: any) {
     console.error('Supabase update tracking exception:', err);
     updateLocalOrderCacheTracking(orderIdentifier, tracking, orderNumberFallback);
+    return { success: false, error: err?.message || 'Database error' };
+  }
+};
+
+/**
+ * Customer Self-Cancellation within 30-minute window
+ * Restores product inventory in Supabase and marks order cancelled.
+ */
+export const cancelOrderInSupabaseAndRestoreStock = async (
+  order: FirestoreOrder,
+  reason: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const orderIdentifier = order.id || order.orderNumber;
+    const orderNumber = order.orderNumber;
+
+    // 1. Update status in database
+    const updateResult = await updateOrderStatusInSupabase(orderIdentifier, 'cancelled', orderNumber);
+    
+    // 2. Restore stock for each item in order
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      for (const item of (order.items as any[])) {
+        const prodId = item.product?.id || item.productId || item.id;
+        const qty = Number(item.quantity || 1);
+        if (prodId && qty > 0) {
+          try {
+            const { data: prodData } = await supabase
+              .from('products')
+              .select('stock_count, stockCount')
+              .eq('id', prodId)
+              .maybeSingle();
+
+            if (prodData) {
+              const currentStock = Number(prodData.stock_count ?? prodData.stockCount ?? 0);
+              const restoredStock = currentStock + qty;
+              await supabase
+                .from('products')
+                .update({ stock_count: restoredStock, stockCount: restoredStock })
+                .eq('id', prodId);
+            }
+          } catch (stockErr) {
+            console.warn(`Failed to restore stock for product ${prodId}:`, stockErr);
+          }
+        }
+      }
+    }
+
+    return { success: updateResult.success, error: updateResult.error };
+  } catch (err: any) {
+    console.error('Failed to cancel order:', err);
+    return { success: false, error: err?.message || 'Could not cancel order' };
+  }
+};
+
+export const updateOrderAiVerificationInSupabase = async (
+  orderIdentifier: string,
+  verification: {
+    paymentScreenshotUrl?: string;
+    aiVerification?: any;
+  },
+  orderNumberFallback?: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const payload: any = {};
+    if (verification.paymentScreenshotUrl !== undefined) {
+      payload.payment_screenshot_url = verification.paymentScreenshotUrl;
+    }
+    if (verification.aiVerification !== undefined) {
+      payload.ai_verification = verification.aiVerification;
+    }
+
+    const orderNumber = orderNumberFallback || (orderIdentifier.startsWith('RG-') ? orderIdentifier : undefined);
+    let updatedRows: any[] = [];
+    let lastError: any = null;
+
+    if (orderNumber) {
+      const { data, error } = await supabase
+        .from('orders')
+        .update(payload)
+        .eq('order_number', orderNumber)
+        .select();
+
+      if (!error && data && data.length > 0) {
+        updatedRows = data;
+      } else if (error) {
+        lastError = error;
+      }
+    }
+
+    if (updatedRows.length === 0 && /^\d+$/.test(orderIdentifier)) {
+      const { data, error } = await supabase
+        .from('orders')
+        .update(payload)
+        .eq('id', Number(orderIdentifier))
+        .select();
+
+      if (!error && data && data.length > 0) {
+        updatedRows = data;
+      } else if (error) {
+        lastError = error;
+      }
+    }
+
+    // Update local cache too
+    const local = getCachedLocalOrders();
+    const updated = local.map(o => {
+      if (o.orderNumber === orderNumber || o.id === orderIdentifier || (orderNumber && o.orderNumber === orderNumber)) {
+        return {
+          ...o,
+          paymentScreenshotUrl: verification.paymentScreenshotUrl || o.paymentScreenshotUrl,
+          aiVerification: verification.aiVerification || o.aiVerification,
+        };
+      }
+      return o;
+    });
+    localStorage.setItem(LOCAL_ORDERS_CACHE_KEY, JSON.stringify(updated));
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Supabase update AI verification exception:', err);
     return { success: false, error: err?.message || 'Database error' };
   }
 };

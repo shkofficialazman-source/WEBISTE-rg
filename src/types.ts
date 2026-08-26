@@ -10,7 +10,53 @@ export interface Category {
   sortOrder?: number;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered';
+export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+
+export interface SavedAddress {
+  id: string;
+  label: 'Home' | 'Office' | 'Garage' | string;
+  recipientName?: string;
+  fullName?: string;
+  phone: string;
+  street?: string;
+  addressLine?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault?: boolean;
+  userId?: string;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  productName?: string;
+  customerName?: string;
+  userName?: string;
+  customerPhone?: string;
+  rating: number; // 1 to 5
+  title?: string;
+  comment: string;
+  verifiedBuyer?: boolean;
+  verifiedPurchase?: boolean;
+  createdAt: string;
+  helpfulCount?: number;
+}
+
+export interface SitePromoBanner {
+  id?: string;
+  enabled: boolean;
+  text?: string;
+  message?: string;
+  highlightCode?: string;
+  couponCode?: string;
+  badgeText?: string;
+  linkUrl?: string;
+  linkText?: string;
+  dismissible?: boolean;
+  theme: 'redline' | 'dark' | 'gold' | 'emerald' | 'amber' | 'red';
+  updatedAt?: string;
+}
 
 export interface CollectorSpecs {
   scale: string;
@@ -77,6 +123,7 @@ export interface UserProfile {
   phone?: string;
   dob?: string; // Date of birth (YYYY-MM-DD)
   role: 'customer' | 'admin';
+  addresses?: SavedAddress[];
   createdAt?: any;
 }
 
@@ -91,6 +138,29 @@ export interface CollectorSpotlight {
   favoriteCasting?: string; // e.g. "Nissan Skyline GT-R (R34) RLC"
   active: boolean;
   updatedAt?: string;
+}
+
+export type AiVerificationStatus = 'AUTHENTIC' | 'UNCLEAR' | 'MISMATCH' | 'NOT_UPLOADED';
+
+export interface AiPaymentVerification {
+  status: AiVerificationStatus;
+  headline: string;
+  isAuthenticLook: boolean;
+  detectedApp?: string;
+  detectedAmount?: number | null;
+  detectedUpiId?: string | null;
+  detectedReceiverName?: string | null;
+  detectedTxnId?: string | null;
+  utrReference?: string | null;
+  recipientVpa?: string | null;
+  detectedTimestamp?: string | null;
+  amountMatches: boolean;
+  upiMatches: boolean;
+  statusSuccess: boolean;
+  editingArtifactsFound: boolean;
+  confidenceScore: number;
+  notes: string;
+  analyzedAt: string;
 }
 
 export interface InvoiceData {
@@ -111,6 +181,8 @@ export interface InvoiceData {
   paymentMethod: string;
   status: OrderStatus;
   notes?: string;
+  paymentScreenshotUrl?: string;
+  aiVerification?: AiPaymentVerification;
   aiVerificationSummary?: string;
 }
 
@@ -127,6 +199,10 @@ export interface FirestoreOrder {
   shipping: number;
   total: number;
   paymentMethod: string;
+  paymentScreenshotUrl?: string;
+  payment_screenshot_url?: string;
+  aiVerification?: AiPaymentVerification;
+  ai_verification?: AiPaymentVerification;
   giftNote?: string;
   status: OrderStatus;
   referralCode?: string;

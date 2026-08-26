@@ -49,7 +49,13 @@ export const fetchCollectorSpotlightFromSupabase = async (): Promise<CollectorSp
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      // If table is not found in schema cache (e.g. PGRST205 or 42P01), log informative tip
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache')) {
+        console.info('Supabase collector_spotlight table not created yet in PostgreSQL. Using local cache. Run supabase_collector_spotlight_migration.sql to enable cloud sync.');
+      } else {
+        console.warn('Supabase fetch collector spotlight notice:', error.message);
+      }
       return cached;
     }
 

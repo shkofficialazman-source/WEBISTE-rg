@@ -86,6 +86,9 @@ import {
   Share2,
   Crown,
   Crop,
+  ShieldCheck,
+  ShieldAlert,
+  Camera,
 } from 'lucide-react';
 import { ImageCropperModal, AspectRatioOption } from './ImageCropperModal';
 import { convertUrlToFile } from '../../utils/imageCropUtils';
@@ -168,6 +171,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBack
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [productSaveError, setProductSaveError] = useState<string | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [productDeleteError, setProductDeleteError] = useState<string | null>(null);
+  const [updatingStockProductId, setUpdatingStockProductId] = useState<string | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [categoryDeleteError, setCategoryDeleteError] = useState<string | null>(null);
 
   // Image Upload & Gallery State
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -288,6 +298,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;`;
   const [trackingForm, setTrackingForm] = useState({ courierName: '', trackingNumber: '', trackingUrl: '' });
   const [isSavingTracking, setIsSavingTracking] = useState(false);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<FirestoreOrder | null>(null);
+  const [inspectingVerificationOrder, setInspectingVerificationOrder] = useState<FirestoreOrder | null>(null);
 
   // Helper to build direct courier tracking URL
   const getCourierTrackingLink = (courierName: string, trackingNumber: string): string => {
@@ -848,6 +859,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
       ? [finalCover, ...cleanGallery.filter(u => u !== finalCover)]
       : [finalCover, ...cleanGallery];
 
+    setIsSavingProduct(true);
+    setProductSaveError(null);
+
     try {
       if (editingProduct) {
         // Update existing product in Supabase
@@ -913,11 +927,15 @@ If you need any assistance with your shipment, feel free to reply directly to th
       setIsAddModalOpen(false);
     } catch (err: any) {
       console.error('Error saving product:', err);
-      alert(err?.message || 'Error saving product. Please check connection and try again.');
+      setProductSaveError(err?.message || 'Error saving product. Please check connection and try again.');
+    } finally {
+      setIsSavingProduct(false);
     }
   };
 
   const handleDeleteProduct = async (productId: string) => {
+    setIsDeletingProduct(true);
+    setProductDeleteError(null);
     try {
       const res = await deleteProductFromSupabase(productId);
       if (!res.success) {
@@ -926,12 +944,13 @@ If you need any assistance with your shipment, feel free to reply directly to th
       deleteProductFromFirestore(productId).catch(err =>
         console.warn('Firestore delete mirror notice:', err)
       );
-      const fresh = await fetchProductsFromSupabase();
-      setProducts(fresh);
+      setProducts(prev => prev.filter(p => p.id !== productId));
       setDeletingProductId(null);
     } catch (err: any) {
       console.error('Error deleting product:', err);
-      alert(err?.message || 'Error deleting product.');
+      setProductDeleteError(err?.message || 'Error deleting product from database.');
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -939,6 +958,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
     const currentProd = products.find(p => p.id === productId);
     if (!currentProd) return;
     const newStock = Math.max(0, currentProd.stockCount + delta);
+    setUpdatingStockProductId(productId);
     try {
       const res = await updateStockInSupabase(productId, newStock);
       if (!res.success) {
@@ -947,11 +967,12 @@ If you need any assistance with your shipment, feel free to reply directly to th
       updateProductInFirestore(productId, { stockCount: newStock }).catch(err =>
         console.warn('Firestore stock update mirror notice:', err)
       );
-      const fresh = await fetchProductsFromSupabase();
-      setProducts(fresh);
+      setProducts(prev => prev.map(p => (p.id === productId ? { ...p, stockCount: newStock } : p)));
     } catch (err: any) {
       console.error('Stock update failed:', err);
       alert(err?.message || 'Failed to update stock.');
+    } finally {
+      setUpdatingStockProductId(null);
     }
   };
 
@@ -1213,13 +1234,17 @@ If you need any assistance with your shipment, feel free to reply directly to th
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
+    setIsDeletingCategory(true);
+    setCategoryDeleteError(null);
     try {
       await deleteCategoryFromSupabase(categoryId);
       setCategories(prev => prev.filter(c => c.id !== categoryId));
       setDeletingCategoryId(null);
     } catch (err: any) {
       console.error('Error deleting collection:', err);
-      alert(`Could not delete collection: ${err.message || 'Error occurred'}`);
+      setCategoryDeleteError(err.message || 'Could not delete collection from database.');
+    } finally {
+      setIsDeletingCategory(false);
     }
   };
 
@@ -2092,22 +2117,30 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                           : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                       }`}
                                     >
-                                      {isLowStock && <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                                      {updatingStockProductId === prod.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600 shrink-0" />
+                                      ) : isLowStock ? (
+                                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      ) : null}
                                       <span>{prod.stockCount} units</span>
                                     </span>
 
                                     {/* Quick Increment / Decrement stock */}
                                     <div className="inline-flex items-center rounded-lg border border-zinc-200 bg-zinc-50 overflow-hidden">
                                       <button
+                                        type="button"
+                                        disabled={updatingStockProductId === prod.id}
                                         onClick={() => handleUpdateStockQuick(prod.id, -1)}
-                                        className="px-2 py-0.5 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 text-xs font-bold cursor-pointer"
+                                        className="px-2 py-0.5 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 text-xs font-bold cursor-pointer disabled:opacity-40"
                                         title="Decrease stock by 1"
                                       >
                                         -
                                       </button>
                                       <button
+                                        type="button"
+                                        disabled={updatingStockProductId === prod.id}
                                         onClick={() => handleUpdateStockQuick(prod.id, 1)}
-                                        className="px-2 py-0.5 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 text-xs font-bold border-l border-zinc-200 cursor-pointer"
+                                        className="px-2 py-0.5 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 text-xs font-bold border-l border-zinc-200 cursor-pointer disabled:opacity-40"
                                         title="Increase stock by 1"
                                       >
                                         +
@@ -2543,6 +2576,48 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                   <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">
                                     Payment: {order.paymentMethod || 'WhatsApp / COD'}
                                   </div>
+
+                                  {/* AI Payment Verification & Screenshot Badge */}
+                                  {order.paymentScreenshotUrl ? (
+                                    <div className="mt-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInspectingVerificationOrder(order)}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono font-bold transition shadow-2xs cursor-pointer border ${
+                                          order.aiVerification?.status === 'AUTHENTIC'
+                                            ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800'
+                                            : order.aiVerification?.status === 'UNCLEAR'
+                                            ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
+                                            : order.aiVerification?.status === 'MISMATCH'
+                                            ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-800'
+                                            : 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800'
+                                        }`}
+                                      >
+                                        {order.aiVerification?.status === 'AUTHENTIC' ? (
+                                          <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        ) : order.aiVerification?.status === 'UNCLEAR' ? (
+                                          <ShieldAlert className="w-3 h-3 text-amber-600 shrink-0" />
+                                        ) : order.aiVerification?.status === 'MISMATCH' ? (
+                                          <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                                        ) : (
+                                          <Camera className="w-3 h-3 text-blue-600 shrink-0" />
+                                        )}
+                                        <span>
+                                          {order.aiVerification?.status === 'AUTHENTIC'
+                                            ? `AI Verified (${order.aiVerification.confidenceScore || 98}%)`
+                                            : order.aiVerification?.status === 'UNCLEAR'
+                                            ? `AI Review Needed`
+                                            : order.aiVerification?.status === 'MISMATCH'
+                                            ? `AI Mismatch`
+                                            : 'View UPI Proof'}
+                                        </span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-1 text-[9px] text-zinc-400 font-mono">
+                                      No screenshot uploaded
+                                    </div>
+                                  )}
                                 </td>
 
                                 <td className="py-4 px-4 align-top">
@@ -3176,20 +3251,39 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 </label>
               </div>
 
+              {/* Product Save Error Notice */}
+              {productSaveError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-bold">Error saving product: </span>
+                    <span>{productSaveError}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200">
                 <button
                   type="button"
+                  disabled={isSavingProduct}
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition font-mono cursor-pointer"
+                  className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition font-mono cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isUploadingImage}
-                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 font-mono uppercase cursor-pointer disabled:opacity-50"
+                  disabled={isUploadingImage || isSavingProduct}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 font-mono uppercase cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {editingProduct ? 'Save Changes' : 'Create Product'}
+                  {isSavingProduct ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{editingProduct ? 'Save Changes' : 'Create Product'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -3452,18 +3546,40 @@ If you need any assistance with your shipment, feel free to reply directly to th
             <p className="text-zinc-600">
               Are you sure you want to permanently delete this product?
             </p>
+
+            {productDeleteError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 text-left text-red-800 text-[11px]">
+                <span className="font-bold">Error: </span>
+                <span>{productDeleteError}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => setDeletingProductId(null)}
-                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition cursor-pointer"
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => {
+                  setDeletingProductId(null);
+                  setProductDeleteError(null);
+                }}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={isDeletingProduct}
                 onClick={() => handleDeleteProduct(deletingProductId)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 cursor-pointer"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                Yes, Delete
+                {isDeletingProduct ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Delete</span>
+                )}
               </button>
             </div>
           </div>
@@ -3483,18 +3599,40 @@ If you need any assistance with your shipment, feel free to reply directly to th
             <p className="text-zinc-600">
               Are you sure you want to delete collection <span className="text-red-600 font-bold">"{deletingCategoryId}"</span> from Supabase?
             </p>
+
+            {categoryDeleteError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 text-left text-red-800 text-[11px]">
+                <span className="font-bold">Error: </span>
+                <span>{categoryDeleteError}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => setDeletingCategoryId(null)}
-                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition cursor-pointer"
+                type="button"
+                disabled={isDeletingCategory}
+                onClick={() => {
+                  setDeletingCategoryId(null);
+                  setCategoryDeleteError(null);
+                }}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={isDeletingCategory}
                 onClick={() => handleDeleteCategory(deletingCategoryId)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 cursor-pointer"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                Yes, Delete
+                {isDeletingCategory ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Delete</span>
+                )}
               </button>
             </div>
           </div>
@@ -3648,6 +3786,197 @@ If you need any assistance with your shipment, feel free to reply directly to th
           order={selectedInvoiceOrder}
           onClose={() => setSelectedInvoiceOrder(null)}
         />
+      )}
+
+      {/* ========================================================= */}
+      {/* AI PAYMENT SCREENSHOT VERIFICATION INSPECTOR MODAL */}
+      {/* ========================================================= */}
+      {inspectingVerificationOrder && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-zinc-200 rounded-3xl max-w-2xl w-full p-6 shadow-2xl font-mono text-xs space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-zinc-900 uppercase">
+                    UPI Payment Verification — #{inspectingVerificationOrder.orderNumber}
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 font-sans">
+                    Customer: {inspectingVerificationOrder.customerName} ({inspectingVerificationOrder.customerPhone})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingVerificationOrder(null)}
+                className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content: Screenshot Image + AI Forensic Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Left Column: Full Screenshot Image */}
+              <div className="space-y-2">
+                <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                  Uploaded Payment Proof
+                </div>
+                {inspectingVerificationOrder.paymentScreenshotUrl ? (
+                  <div className="relative rounded-2xl border border-zinc-200 overflow-hidden bg-zinc-900 group">
+                    <img
+                      src={inspectingVerificationOrder.paymentScreenshotUrl}
+                      alt="Customer Payment Screenshot"
+                      className="w-full max-h-[360px] object-contain mx-auto bg-zinc-950"
+                    />
+                    <a
+                      href={inspectingVerificationOrder.paymentScreenshotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute bottom-2 right-2 bg-black/70 hover:bg-black text-white text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1 transition"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Full View</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="h-48 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 flex flex-col items-center justify-center text-zinc-400 gap-2">
+                    <Camera className="w-8 h-8 opacity-40" />
+                    <span>No screenshot image provided</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: AI Analysis Verdict */}
+              <div className="space-y-3 font-sans">
+                <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
+                  Gemini AI Forensic Verdict
+                </div>
+
+                {inspectingVerificationOrder.aiVerification ? (
+                  <div
+                    className={`p-4 rounded-2xl border space-y-3 ${
+                      inspectingVerificationOrder.aiVerification.status === 'AUTHENTIC'
+                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                        : inspectingVerificationOrder.aiVerification.status === 'UNCLEAR'
+                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                        : 'bg-rose-50/90 border-rose-300 text-rose-950'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-black text-sm">
+                        {inspectingVerificationOrder.aiVerification.status === 'AUTHENTIC' ? (
+                          <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                        ) : inspectingVerificationOrder.aiVerification.status === 'UNCLEAR' ? (
+                          <ShieldAlert className="w-5 h-5 text-amber-600" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-rose-600" />
+                        )}
+                        <span className="uppercase font-mono">
+                          {inspectingVerificationOrder.aiVerification.status === 'AUTHENTIC'
+                            ? 'Likely Authentic'
+                            : inspectingVerificationOrder.aiVerification.status === 'UNCLEAR'
+                            ? 'Manual Inspection Required'
+                            : 'Potential Mismatch'}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold bg-white/80 px-2 py-0.5 rounded-full">
+                        {inspectingVerificationOrder.aiVerification.confidenceScore || 90}% Match
+                      </span>
+                    </div>
+
+                    <p className="text-xs leading-relaxed">
+                      {inspectingVerificationOrder.aiVerification.headline || inspectingVerificationOrder.aiVerification.notes}
+                    </p>
+
+                    {/* Forensic Details List */}
+                    <div className="bg-white/80 rounded-xl p-3 space-y-1.5 text-xs font-mono border border-current/10">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Detected App:</span>
+                        <span className="font-bold">{inspectingVerificationOrder.aiVerification.detectedApp || 'UPI App'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Detected Amount:</span>
+                        <span className="font-bold text-emerald-700">
+                          {inspectingVerificationOrder.aiVerification.detectedAmount
+                            ? `₹${inspectingVerificationOrder.aiVerification.detectedAmount}`
+                            : 'Not readable'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Order Amount:</span>
+                        <span className="font-bold text-red-600">₹{inspectingVerificationOrder.total.toFixed(2)}</span>
+                      </div>
+                      {inspectingVerificationOrder.aiVerification.utrReference && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">UTR / Ref No:</span>
+                          <span className="font-bold select-all">{inspectingVerificationOrder.aiVerification.utrReference}</span>
+                        </div>
+                      )}
+                      {inspectingVerificationOrder.aiVerification.recipientVpa && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Recipient VPA:</span>
+                          <span className="font-bold truncate max-w-[150px]">{inspectingVerificationOrder.aiVerification.recipientVpa}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-zinc-100 border border-zinc-200 text-xs text-zinc-600">
+                    Screenshot uploaded before AI verification integration or manual payment.
+                  </div>
+                )}
+
+                {/* Important Admin Disclaimer */}
+                <div className="p-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-[10px] text-zinc-600 font-sans leading-normal">
+                  <strong>Notice:</strong> AI analysis provides a rapid automated check. Final confirmation of payment credit remains a manual admin authorization against the bank statement.
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-zinc-100 font-mono">
+              <a
+                href={`https://wa.me/${inspectingVerificationOrder.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                  `Hi ${inspectingVerificationOrder.customerName}, regarding your Redline Garage order #${inspectingVerificationOrder.orderNumber}: We are checking your UPI payment of ₹${inspectingVerificationOrder.total}.`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <span>Message Customer on WhatsApp</span>
+              </a>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInspectingVerificationOrder(null)}
+                  className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-bold transition cursor-pointer text-xs"
+                >
+                  Close
+                </button>
+                {inspectingVerificationOrder.status === 'pending' && (
+                  <button
+                    type="button"
+                    disabled={updatingOrderId === inspectingVerificationOrder.id}
+                    onClick={async () => {
+                      await handleStatusChange(inspectingVerificationOrder.id!, 'confirmed', inspectingVerificationOrder.orderNumber);
+                      setInspectingVerificationOrder(null);
+                    }}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer text-xs"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Approve & Confirm Order</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ========================================================= */}

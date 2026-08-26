@@ -72,7 +72,16 @@ export const fetchReferralCodesFromSupabase = async (): Promise<ReferralCode[]> 
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache')) {
+        console.info('Supabase referral_codes table pending creation. Using local cache. Run supabase_referral_codes_migration.sql to enable cloud sync.');
+      } else {
+        console.warn('Supabase fetch referral codes notice:', error.message);
+      }
+      return cached;
+    }
+
+    if (!data || data.length === 0) {
       return cached;
     }
 

@@ -35,7 +35,16 @@ export const fetchLoyaltySettings = async (): Promise<LoyaltySettings> => {
       .eq('key', 'loyalty_settings')
       .maybeSingle();
 
-    if (error || !data || !data.value) {
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache')) {
+        console.info('Supabase store_settings table pending creation. Using local cache. Run supabase_loyalty_migration.sql to enable cloud sync.');
+      } else {
+        console.warn('Failed to fetch loyalty settings from Supabase, using cache:', error.message);
+      }
+      return cached;
+    }
+
+    if (!data || !data.value) {
       return cached;
     }
 
@@ -344,8 +353,17 @@ export const fetchAllLoyaltyAccounts = async (): Promise<LoyaltyAccount[]> => {
       .select('*')
       .order('points_balance', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      return Object.values(localMap);
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache')) {
+        console.info('Supabase loyalty_accounts table pending creation. Using local cache. Run supabase_loyalty_migration.sql to enable cloud sync.');
+      } else {
+        console.warn('Supabase fetch all loyalty accounts notice:', error.message);
+      }
+      return Object.values(localMap).sort((a, b) => b.pointsBalance - a.pointsBalance);
+    }
+
+    if (!data || data.length === 0) {
+      return Object.values(localMap).sort((a, b) => b.pointsBalance - a.pointsBalance);
     }
 
     const remoteAccounts: LoyaltyAccount[] = data.map((d: any) => ({

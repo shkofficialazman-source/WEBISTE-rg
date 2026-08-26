@@ -26,6 +26,7 @@ import {
   Tag,
   Clock,
   Filter,
+  Loader2,
 } from 'lucide-react';
 import { RedlineLogo } from '../RedlineLogo';
 
@@ -37,6 +38,9 @@ export const SubscribersTab: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'unsubscribed'>('all');
   const [isCopiedAll, setIsCopiedAll] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [togglingSubscriberId, setTogglingSubscriberId] = useState<string | null>(null);
+  const [deletingSubscriberId, setDeletingSubscriberId] = useState<string | null>(null);
+  const [isDeletingSubscriber, setIsDeletingSubscriber] = useState<boolean>(false);
 
   // Manual Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -131,6 +135,7 @@ export const SubscribersTab: React.FC = () => {
 
   const handleToggleStatus = async (sub: NewsletterSubscriber) => {
     const nextStatus = sub.status === 'active' ? 'unsubscribed' : 'active';
+    setTogglingSubscriberId(sub.id);
     try {
       await updateNewsletterSubscriberInFirestore(sub.id, { status: nextStatus });
       setSubscribers((prev) =>
@@ -138,16 +143,21 @@ export const SubscribersTab: React.FC = () => {
       );
     } catch (err) {
       console.error('Failed to update subscriber status:', err);
+    } finally {
+      setTogglingSubscriberId(null);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to remove this subscriber from the list?')) return;
+  const handleConfirmDelete = async (id: string) => {
+    setIsDeletingSubscriber(true);
     try {
       await deleteNewsletterSubscriberFromFirestore(id);
       setSubscribers((prev) => prev.filter((item) => item.id !== id));
+      setDeletingSubscriberId(null);
     } catch (err) {
       console.error('Failed to delete subscriber:', err);
+    } finally {
+      setIsDeletingSubscriber(false);
     }
   };
 
@@ -177,7 +187,7 @@ export const SubscribersTab: React.FC = () => {
         setTimeout(() => {
           setIsAddModalOpen(false);
           setActionMessage(null);
-        }, 1500);
+        }, 1200);
       } else {
         setActionMessage({ type: 'error', text: res.message });
       }
@@ -390,14 +400,20 @@ export const SubscribersTab: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleToggleStatus(sub)}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                        disabled={togglingSubscriberId === sub.id}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-60 cursor-pointer ${
                           sub.status === 'active'
                             ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                             : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
                         }`}
                         title="Click to toggle active/unsubscribed"
                       >
-                        {sub.status === 'active' ? (
+                        {togglingSubscriberId === sub.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin text-zinc-600" />
+                            <span>Updating...</span>
+                          </>
+                        ) : sub.status === 'active' ? (
                           <>
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             <span>Active</span>
@@ -434,8 +450,8 @@ export const SubscribersTab: React.FC = () => {
                     <td className="px-4 py-3.5 text-right">
                       <button
                         type="button"
-                        onClick={() => handleDelete(sub.id)}
-                        className="text-zinc-400 hover:text-red-600 p-1 rounded-md transition-colors cursor-pointer"
+                        onClick={() => setDeletingSubscriberId(sub.id)}
+                        className="text-zinc-400 hover:text-red-600 p-1.5 rounded-md transition-colors cursor-pointer"
                         title="Delete subscriber"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -618,6 +634,47 @@ export const SubscribersTab: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deletingSubscriberId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-zinc-200 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 font-mono">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-black text-zinc-900 text-sm font-sans uppercase">Remove Subscriber?</h3>
+              <p className="text-xs text-zinc-500">
+                This subscriber will be removed from your newsletter and broadcast audience list.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={isDeletingSubscriber}
+                onClick={() => setDeletingSubscriberId(null)}
+                className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 py-2.5 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingSubscriber}
+                onClick={() => handleConfirmDelete(deletingSubscriberId)}
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isDeletingSubscriber ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  <span>Confirm Delete</span>
+                )}
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FirestoreOrder, UserProfile } from '../types';
-import { fetchOrdersByPhoneFromSupabase } from '../supabase';
+import { fetchOrdersByPhoneFromSupabase, cancelOrderInSupabaseAndRestoreStock } from '../supabase';
 import { getCourierTrackingUrl } from './CustomerOrdersModal';
 import {
   Package,
@@ -24,6 +24,10 @@ import {
   CreditCard,
   MessageCircle,
   FileText,
+  XCircle,
+  AlertTriangle,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { InvoiceModal } from './InvoiceModal';
 import { OrderStatusChip } from './admin/OrderStatusChip';

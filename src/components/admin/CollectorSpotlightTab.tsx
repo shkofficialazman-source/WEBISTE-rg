@@ -6,7 +6,7 @@ import {
   updateCollectorSpotlightInSupabase,
   DEFAULT_COLLECTOR_SPOTLIGHT,
 } from '../../collectorSpotlight';
-import { uploadImageToSupabase } from '../../supabase';
+import { uploadImageToSupabase, supabase } from '../../supabase';
 import { uploadProductImageToStorage } from '../../firebase';
 import {
   Award,
@@ -23,9 +23,54 @@ import {
   Car,
   Crop,
   Image as ImageIcon,
+  Copy,
+  ExternalLink,
+  Database,
 } from 'lucide-react';
 import { ImageCropperModal } from './ImageCropperModal';
 import { convertUrlToFile } from '../../utils/imageCropUtils';
+
+const COLLECTOR_SPOTLIGHT_SQL = `-- CREATE collector_spotlight TABLE & RLS POLICIES
+CREATE TABLE IF NOT EXISTS public.collector_spotlight (
+    id BIGINT PRIMARY KEY DEFAULT 1,
+    collector_name TEXT NOT NULL,
+    instagram_handle TEXT,
+    photo_url TEXT NOT NULL,
+    story_quote TEXT NOT NULL,
+    featured_month TEXT NOT NULL DEFAULT 'Current Month',
+    collection_size TEXT DEFAULT '500+ Castings',
+    favorite_casting TEXT DEFAULT 'Nissan Skyline GT-R (BNR34) RLC',
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.collector_spotlight ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public select collector_spotlight" ON public.collector_spotlight;
+DROP POLICY IF EXISTS "Allow public insert collector_spotlight" ON public.collector_spotlight;
+DROP POLICY IF EXISTS "Allow public update collector_spotlight" ON public.collector_spotlight;
+DROP POLICY IF EXISTS "Allow public delete collector_spotlight" ON public.collector_spotlight;
+
+CREATE POLICY "Allow public select collector_spotlight" ON public.collector_spotlight FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow public insert collector_spotlight" ON public.collector_spotlight FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow public update collector_spotlight" ON public.collector_spotlight FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete collector_spotlight" ON public.collector_spotlight FOR DELETE TO anon, authenticated USING (true);
+
+INSERT INTO public.collector_spotlight (
+    id, collector_name, instagram_handle, photo_url, story_quote, featured_month, collection_size, favorite_casting, active
+) VALUES (
+    1,
+    'Rohan Deshmukh (@rohan_diecast_garage)',
+    '@rohan_diecast_garage',
+    'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=800&auto=format&fit=crop&q=80',
+    'Started collecting in 2018 with a 1968 Custom Camaro. Now guarding 650+ carded pieces including rare RLC Skylines and Redline Garage bespoke custom cards displayed in UV-safe acrylic frames.',
+    'August 2026',
+    '650+ Carded Castings',
+    'Nissan Skyline GT-R (BNR34) RLC & 71 Datsun 510',
+    true
+) ON CONFLICT (id) DO NOTHING;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.collector_spotlight;`;
 
 export const CollectorSpotlightTab: React.FC = () => {
   const [spotlight, setSpotlight] = useState<CollectorSpotlight>(getCachedCollectorSpotlight);
@@ -35,6 +80,8 @@ export const CollectorSpotlightTab: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isPreparingReCrop, setIsPreparingReCrop] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [tableExists, setTableExists] = useState<boolean | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Cropper modal state
   const [cropModalOpen, setCropModalOpen] = useState(false);
@@ -42,6 +89,18 @@ export const CollectorSpotlightTab: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
+    
+    // Check if table exists in Supabase
+    supabase.from('collector_spotlight').select('id').limit(1).then(({ error }) => {
+      if (isMounted) {
+        if (error && (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache'))) {
+          setTableExists(false);
+        } else {
+          setTableExists(true);
+        }
+      }
+    });
+
     fetchCollectorSpotlightFromSupabase().then((data) => {
       if (isMounted) {
         setSpotlight(data);
@@ -53,6 +112,13 @@ export const CollectorSpotlightTab: React.FC = () => {
       isMounted = false;
     };
   }, []);
+
+  const handleCopyMigrationSql = () => {
+    navigator.clipboard.writeText(COLLECTOR_SPOTLIGHT_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 4000);
+  };
+
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -168,6 +234,50 @@ export const CollectorSpotlightTab: React.FC = () => {
           <span>Active Period: <strong>{formData.featuredMonth || 'Current Month'}</strong></span>
         </div>
       </div>
+
+      {/* Supabase Schema Status & Setup Banner */}
+      {tableExists === false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-xs font-mono space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+              <Database className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Supabase Database Notice: `collector_spotlight` Table Pending Creation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyMigrationSql}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copiedSql ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'SQL Copied!' : 'Copy SQL Migration'}</span>
+              </button>
+              <a
+                href="https://supabase.com/dashboard/project/bmuccamypbfrrhealjgq/sql/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open SQL Editor</span>
+              </a>
+            </div>
+          </div>
+          <p className="text-amber-800 leading-relaxed text-[11px]">
+            The application is currently preserving your edits in local storage cache. To enable real-time PostgreSQL synchronization across all devices and browsers, copy the migration SQL and execute it in your Supabase SQL Editor.
+          </p>
+        </div>
+      )}
+
+      {tableExists === true && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-xs font-mono text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="font-bold">Supabase PostgreSQL Connected: `public.collector_spotlight` Active</span>
+          </div>
+          <span className="text-[10px] text-emerald-600 hidden sm:inline">Row Level Security Enabled</span>
+        </div>
+      )}
 
       {statusMessage && (
         <div

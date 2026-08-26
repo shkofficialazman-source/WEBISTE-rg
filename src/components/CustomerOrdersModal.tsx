@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { FirestoreOrder, UserProfile } from '../types';
 import { fetchCustomerOrdersFromFirestore } from '../firebase';
 import { fetchOrdersFromSupabase } from '../supabase';
@@ -243,8 +244,26 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="bg-white border border-zinc-200 text-zinc-900 rounded-t-3xl sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative font-sans flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 overflow-hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        {/* iOS Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs"
+        />
+
+        {/* iOS Modal/Sheet */}
+        <motion.div
+          initial={{ y: '100%', opacity: 0.8 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300, mass: 0.85 }}
+          className="bg-white border border-zinc-200 text-zinc-900 rounded-t-3xl sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative font-sans flex flex-col max-h-[92vh] sm:max-h-[85vh] z-10"
+        >
         {/* Modal Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -335,7 +354,8 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
             Close
           </button>
         </div>
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 };

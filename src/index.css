@@ -8,6 +8,17 @@ html, body {
   padding: 0;
   background-color: #ffffff;
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 #root {
@@ -147,5 +158,45 @@ html, body {
 
 .animate-badge-pop {
   animation: badgePopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* iOS Spring & Physical Animation Utilities */
+@keyframes iosSheetUp {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes iosFadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-ios-sheet {
+  animation: iosSheetUp 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-ios-card {
+  animation: iosFadeSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* iOS physical button tap interaction */
+.btn-ios {
+  transition: transform 0.16s cubic-bezier(0.32, 0.72, 0, 1), background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-ios:active {
+  transform: scale(0.96);
 }
 

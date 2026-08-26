@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
 import { saveOrderToSupabase } from '../supabase';
 import { appendOrderToGoogleSheet } from '../googleSheets';
@@ -153,8 +154,26 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm animate-fade-in font-sans">
-      <div className="bg-white border border-zinc-200 rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-8 relative text-left text-zinc-900 shadow-2xl space-y-6">
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 font-sans overflow-hidden">
+        {/* iOS backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+        />
+
+        {/* iOS Sheet/Modal */}
+        <motion.div
+          initial={{ y: '100%', opacity: 0.8 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300, mass: 0.85 }}
+          className="bg-white border border-zinc-200 rounded-t-3xl sm:rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-8 relative text-left text-zinc-900 shadow-2xl space-y-6 z-10"
+        >
         
         {/* Close Button */}
         <button
@@ -431,7 +450,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
 
         </div>
 
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 };

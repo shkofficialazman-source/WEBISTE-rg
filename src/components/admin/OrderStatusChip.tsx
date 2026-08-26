@@ -81,9 +81,20 @@ const STATUS_CONFIGS: Record<OrderStatus, StatusConfig> = {
     accentIconColor: 'text-emerald-600',
     description: 'Successfully delivered to customer doorstep',
   },
+  cancelled: {
+    label: 'Cancelled',
+    icon: Sparkles,
+    badgeClasses: 'bg-zinc-100 text-zinc-700 border-zinc-300 shadow-zinc-500/10',
+    bgRgba: 'rgba(244, 244, 245, 0.95)',
+    glowColor: 'rgba(113, 113, 122, 0.4)',
+    borderClass: 'border-zinc-300',
+    textClass: 'text-zinc-700',
+    accentIconColor: 'text-zinc-500',
+    description: 'Order was cancelled and inventory restored',
+  },
 };
 
-const ALL_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'shipped', 'delivered'];
+const ALL_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 
 export const OrderStatusChip: React.FC<OrderStatusChipProps> = ({
   status,

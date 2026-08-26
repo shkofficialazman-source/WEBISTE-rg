@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ReferralCode, ReferralDiscountType } from '../../types';
+import { supabase } from '../../supabase';
 import {
   fetchReferralCodesFromSupabase,
   createReferralCodeInSupabase,
@@ -21,7 +22,54 @@ import {
   X,
   Check,
   Copy,
+  Loader2,
+  ExternalLink,
+  Database,
 } from 'lucide-react';
+
+const REFERRAL_CODES_SQL = `-- CREATE referral_codes TABLE & RLS POLICIES
+CREATE TABLE IF NOT EXISTS public.referral_codes (
+    id BIGSERIAL PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    discount_type TEXT NOT NULL DEFAULT 'percentage', -- 'percentage' or 'flat'
+    discount_value NUMERIC(10, 2) NOT NULL DEFAULT 10,
+    active BOOLEAN NOT NULL DEFAULT true,
+    uses_count INTEGER NOT NULL DEFAULT 0,
+    max_uses INTEGER,
+    min_order_amount NUMERIC(10, 2),
+    total_discount_given NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    is_collector_referral BOOLEAN NOT NULL DEFAULT false,
+    creator_uid TEXT,
+    creator_email TEXT,
+    creator_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_codes_code ON public.referral_codes (code);
+CREATE INDEX IF NOT EXISTS idx_referral_codes_creator_uid ON public.referral_codes (creator_uid);
+
+ALTER TABLE public.referral_codes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow public insert referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow public update referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow public delete referral_codes" ON public.referral_codes;
+
+CREATE POLICY "Allow public select referral_codes" ON public.referral_codes FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Allow public insert referral_codes" ON public.referral_codes FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow public update referral_codes" ON public.referral_codes FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete referral_codes" ON public.referral_codes FOR DELETE TO anon, authenticated USING (true);
+
+INSERT INTO public.referral_codes (
+    code, discount_type, discount_value, active, uses_count, max_uses, min_order_amount, total_discount_given, is_collector_referral
+) VALUES 
+    ('AZMAN10', 'percentage', 10, true, 14, NULL, 0, 1250, true),
+    ('REDLINE50', 'flat', 50, true, 8, 100, 499, 400, false),
+    ('DIECAST15', 'percentage', 15, true, 5, 50, 999, 680, false)
+ON CONFLICT (code) DO NOTHING;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.referral_codes;`;
 
 export const ReferralCodesTab: React.FC = () => {
   const [codes, setCodes] = useState<ReferralCode[]>([]);
@@ -31,12 +79,16 @@ export const ReferralCodesTab: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [tableExists, setTableExists] = useState<boolean | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCode, setEditingCode] = useState<ReferralCode | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
+  const [isDeletingCode, setIsDeletingCode] = useState(false);
+  const [togglingCodeId, setTogglingCodeId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     code: '',
@@ -50,14 +102,28 @@ export const ReferralCodesTab: React.FC = () => {
     creatorEmail: '',
   });
 
+  const checkTableStatus = async () => {
+    try {
+      const { error } = await supabase.from('referral_codes').select('id').limit(1);
+      if (error && (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('schema cache'))) {
+        setTableExists(false);
+      } else {
+        setTableExists(true);
+      }
+    } catch {
+      setTableExists(false);
+    }
+  };
+
   const loadCodes = async () => {
     setIsRefreshing(true);
     try {
+      await checkTableStatus();
       const data = await fetchReferralCodesFromSupabase();
       setCodes(data);
       setErrorMessage('');
     } catch (err: any) {
-      setErrorMessage('Failed to load referral codes.');
+      setErrorMessage('Failed to load referral codes from database.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -67,6 +133,12 @@ export const ReferralCodesTab: React.FC = () => {
   useEffect(() => {
     loadCodes();
   }, []);
+
+  const handleCopyMigrationSql = () => {
+    navigator.clipboard.writeText(REFERRAL_CODES_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 4000);
+  };
 
   const handleOpenCreateModal = () => {
     setEditingCode(null);
@@ -122,7 +194,7 @@ export const ReferralCodesTab: React.FC = () => {
       if (editingCode) {
         // Update in Supabase
         const updated = await updateReferralCodeInSupabase(editingCode.id, {
-          code: formData.code,
+          code: formData.code.trim().toUpperCase(),
           discountType: formData.discountType,
           discountValue: Number(formData.discountValue),
           active: formData.active,
@@ -131,13 +203,14 @@ export const ReferralCodesTab: React.FC = () => {
         });
 
         if (updated) {
-          await loadCodes();
+          setCodes(prev => prev.map(c => (c.id === editingCode.id ? updated : c)));
           setSuccessMessage(`Updated code "${updated.code}" successfully in database.`);
+          setTimeout(() => setSuccessMessage(''), 3500);
         }
       } else {
         // Create in Supabase
         const created = await createReferralCodeInSupabase({
-          code: formData.code,
+          code: formData.code.trim().toUpperCase(),
           discountType: formData.discountType,
           discountValue: Number(formData.discountValue),
           active: formData.active,
@@ -145,40 +218,53 @@ export const ReferralCodesTab: React.FC = () => {
           minOrderAmount: minOrderVal,
         });
 
-        await loadCodes();
+        setCodes(prev => [created, ...prev.filter(c => c.id !== created.id)]);
         setSuccessMessage(`Created promo code "${created.code}" in database!`);
+        setTimeout(() => setSuccessMessage(''), 3500);
       }
 
       setIsModalOpen(false);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save referral code.');
+      console.error('Save code error:', err);
+      setErrorMessage(err?.message || 'Failed to save referral code to database.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleToggleActive = async (code: ReferralCode) => {
+    setTogglingCodeId(code.id);
+    setErrorMessage('');
     try {
-      const updated = await updateReferralCodeInSupabase(code.id, { active: !code.active });
+      const nextActive = !code.active;
+      const updated = await updateReferralCodeInSupabase(code.id, { active: nextActive });
       if (updated) {
-        await loadCodes();
-        setSuccessMessage(`Code "${code.code}" is now ${!code.active ? 'Active' : 'Disabled'}.`);
+        setCodes(prev => prev.map(c => (c.id === code.id ? { ...c, active: nextActive } : c)));
+        setSuccessMessage(`Code "${code.code}" is now ${nextActive ? 'Active' : 'Disabled'}.`);
         setTimeout(() => setSuccessMessage(''), 3000);
       }
     } catch (err: any) {
+      console.error('Toggle code error:', err);
       setErrorMessage(err?.message || 'Failed to toggle code status in database.');
+    } finally {
+      setTogglingCodeId(null);
     }
   };
 
   const handleDeleteCode = async (codeId: string) => {
+    setIsDeletingCode(true);
+    setErrorMessage('');
     try {
       await deleteReferralCodeInSupabase(codeId);
-      await loadCodes();
+      setCodes(prev => prev.filter(c => c.id !== codeId));
       setDeletingCodeId(null);
-      setSuccessMessage('Referral code removed from database.');
+      setSuccessMessage('Referral code removed from database successfully.');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to delete code.');
+      console.error('Delete code error:', err);
+      setErrorMessage(err?.message || 'Failed to delete code from database.');
+    } finally {
+      setIsDeletingCode(false);
     }
   };
 
@@ -267,6 +353,50 @@ export const ReferralCodesTab: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Supabase Schema Status & Setup Banner */}
+      {tableExists === false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-xs font-mono space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+              <Database className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Supabase Database Notice: `referral_codes` Table Pending Creation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyMigrationSql}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copiedSql ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'SQL Copied!' : 'Copy SQL Migration'}</span>
+              </button>
+              <a
+                href="https://supabase.com/dashboard/project/bmuccamypbfrrhealjgq/sql/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open SQL Editor</span>
+              </a>
+            </div>
+          </div>
+          <p className="text-amber-800 leading-relaxed text-[11px]">
+            The referral engine is currently working via browser cache. To enable cross-device synchronization and automatic VIP collector referral codes, run the migration in Supabase SQL Editor.
+          </p>
+        </div>
+      )}
+
+      {tableExists === true && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-xs font-mono text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="font-bold">Supabase PostgreSQL Connected: `public.referral_codes` Active</span>
+          </div>
+          <span className="text-[10px] text-emerald-600 hidden sm:inline">Row Level Security Enabled</span>
+        </div>
+      )}
 
       {/* Messages */}
       {errorMessage && (
@@ -400,14 +530,20 @@ export const ReferralCodesTab: React.FC = () => {
                       <td className="p-3.5">
                         <button
                           onClick={() => handleToggleActive(code)}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase cursor-pointer border ${
+                          disabled={togglingCodeId === code.id}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase cursor-pointer border transition-all disabled:opacity-60 ${
                             code.active
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                              : 'bg-zinc-100 text-zinc-500 border-zinc-300'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-zinc-100 text-zinc-500 border-zinc-300 hover:bg-zinc-200'
                           }`}
                           title="Click to toggle active state"
                         >
-                          {code.active ? (
+                          {togglingCodeId === code.id ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin text-zinc-600" />
+                              <span>Saving...</span>
+                            </>
+                          ) : code.active ? (
                             <>
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                               <span>Active</span>
@@ -596,9 +732,16 @@ export const ReferralCodesTab: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : editingCode ? 'Save Changes' : 'Create Code'}
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to DB...</span>
+                    </>
+                  ) : (
+                    <span>{editingCode ? 'Save Changes' : 'Create Code'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -621,16 +764,27 @@ export const ReferralCodesTab: React.FC = () => {
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
+                disabled={isDeletingCode}
                 onClick={() => setDeletingCodeId(null)}
-                className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 py-2.5 rounded-xl font-bold text-xs cursor-pointer"
+                className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 py-2.5 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={isDeletingCode}
                 onClick={() => handleDeleteCode(deletingCodeId)}
-                className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-bold text-xs cursor-pointer"
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                Confirm Delete
+                {isDeletingCode ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Confirm Delete</span>
+                )}
               </button>
             </div>
           </div>
