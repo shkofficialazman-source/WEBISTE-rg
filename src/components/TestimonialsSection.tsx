@@ -11,13 +11,13 @@ export const TestimonialsSection: React.FC = () => {
         {/* Title */}
         <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
           <div className="inline-flex items-center gap-2 text-xs font-mono font-bold text-red-600 uppercase tracking-widest bg-red-50 px-3.5 py-1.5 rounded-full border border-red-200">
-            <span>Customer Praise</span>
+            <span>Collector Reviews & Verified Feedback</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tight font-sans text-zinc-900">
-            Hear From Our <span className="text-red-600">Gift Buyers</span>
+            Hear From Our <span className="text-red-600">Hot Wheels Collectors</span>
           </h2>
           <p className="text-zinc-600 text-sm font-normal">
-            Read unedited reviews from wives, girlfriends, husbands, and die-cast collectors.
+            Real feedback from avid die-cast collectors, car enthusiasts, and gift buyers across India.
           </p>
         </div>
 

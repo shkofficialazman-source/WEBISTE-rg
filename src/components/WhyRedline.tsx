@@ -33,13 +33,13 @@ export const WhyRedline: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
           <div className="inline-flex items-center gap-2 text-xs font-mono font-bold text-red-600 uppercase tracking-widest bg-red-50 px-3.5 py-1.5 rounded-full border border-red-200">
             <Flame className="w-3.5 h-3.5 text-red-600" />
-            <span>The Redline Difference</span>
+            <span>The Redline Collector Standard</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tight font-sans text-zinc-900">
-            Why <span className="text-red-600">Redline Garage</span> Is #1 For Gifts
+            Why <span className="text-red-600">Hot Wheels Collectors</span> Trust Redline
           </h2>
           <p className="text-zinc-600 text-sm sm:text-base font-normal">
-            We bridge childhood nostalgic joy with luxury gift craftsmanship. Here’s why car lovers and collectors obsess over our work.
+            From 100% genuine Mattel die-cast castings to crease-free armored packaging, here is why collectors and gift buyers across India choose us.
           </p>
         </div>
 

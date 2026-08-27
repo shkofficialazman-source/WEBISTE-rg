@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles, Trophy, User, LogOut, Package, ChevronDown, Heart, Bot } from 'lucide-react';
+import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles, Trophy, User, LogOut, Package, ChevronDown, Heart, Bot, Flame, MessageCircle } from 'lucide-react';
 import { UserProfile, PitCrewRole } from '../types';
 import { getWishlistIds, subscribeToWishlist } from '../wishlist';
 import { RedlineLogo } from './RedlineLogo';
+import { BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface NavbarProps {
   cartCount: number;
@@ -53,20 +54,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-zinc-200 text-zinc-900 shadow-xs transition-all">
       {/* Top Racing Ticker */}
-      <div className="bg-red-600 text-white text-xs font-semibold py-1 px-4 text-center tracking-wider flex items-center justify-center gap-3 overflow-hidden">
-        <span className="hidden sm:inline-flex items-center gap-1 font-bold uppercase text-[10px] bg-black/20 px-2 py-0.5 rounded">
-          <Trophy className="w-3 h-3 text-yellow-300" /> OFFICIAL DIE-CAST GIFTING
+      <div className="bg-zinc-950 text-white text-xs font-semibold py-1 px-3 sm:px-4 text-center tracking-wider flex items-center justify-between sm:justify-center gap-2 sm:gap-4 overflow-hidden border-b border-zinc-800">
+        <span className="hidden sm:inline-flex items-center gap-1 font-bold uppercase text-[10px] bg-red-600/30 text-red-300 border border-red-500/40 px-2 py-0.5 rounded">
+          <Trophy className="w-3 h-3 text-amber-300" /> OFFICIAL DIE-CAST STORE
         </span>
-        <span className="truncate">
-          ⚡ FAST 24-48H DISPATCH | FREE GIFT BOX WRAP ON ORDERS OVER ₹50
+        <span className="truncate text-[11px] sm:text-xs">
+          ⚡ 24-48H DISPATCH | FREE GIFT BOX ON ORDERS OVER ₹50
         </span>
         <a 
-          href="https://wa.me/8431294886?text=Hi%20Redline%20Garage!%20I%20have%20a%20question" 
+          href={BRAND_WHATSAPP_GROUP_URL} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="hidden md:inline-flex items-center gap-1 underline hover:text-yellow-200 transition text-[11px]"
+          className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-zinc-950 font-black px-2.5 sm:px-3 py-0.5 rounded-full transition text-[10px] sm:text-[11px] uppercase tracking-wider shadow-sm shadow-emerald-500/30 active:scale-95 shrink-0"
         >
-          WhatsApp Concierge
+          <MessageCircle className="w-3 h-3 fill-zinc-950 text-zinc-950" />
+          <span>Join WhatsApp Group</span>
         </a>
       </div>
 
@@ -81,12 +83,31 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 font-medium text-sm text-zinc-700">
+        <nav className="hidden lg:flex items-center gap-5 xl:gap-6 font-medium text-sm text-zinc-700">
+          <button 
+            onClick={() => handleNavClick('featured-hotwheels')} 
+            className="hover:text-red-600 text-zinc-900 transition-colors uppercase text-xs font-black tracking-wider cursor-pointer flex items-center gap-1 text-red-600"
+          >
+            <Flame className="w-3.5 h-3.5 fill-red-600 text-red-600" />
+            <span>Hot Wheels</span>
+          </button>
+          <button 
+            onClick={() => handleNavClick('collector-picks')} 
+            className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
+          >
+            Best Sellers
+          </button>
+          <button 
+            onClick={() => handleNavClick('premium-rare')} 
+            className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
+          >
+            Premiums
+          </button>
           <button 
             onClick={() => handleNavClick('catalog')} 
             className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
           >
-            Shop All
+            Full Vault
           </button>
           <button 
             onClick={() => {
@@ -106,13 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer flex items-center gap-1 text-red-600"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Value Scanner</span>
-          </button>
-          <button 
-            onClick={() => handleNavClick('categories')} 
-            className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
-          >
-            Bouquets & Frames
+            <span>Value Scanner</span>
           </button>
           <button 
             onClick={() => {
@@ -128,12 +143,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
           >
             Why Redline
-          </button>
-          <button 
-            onClick={() => handleNavClick('faq')} 
-            className="hover:text-red-600 transition-colors uppercase text-xs font-bold tracking-wider cursor-pointer"
-          >
-            FAQ
           </button>
         </nav>
 
@@ -170,6 +179,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Highlighted VIP WhatsApp Group Button */}
+          <a
+            href={BRAND_WHATSAPP_GROUP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-mono font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs shadow-emerald-600/20 hover:shadow-md hover:shadow-emerald-500/30 transition-all active:scale-95 border border-emerald-400/40"
+            title="Join Redline Hot Wheels VIP WhatsApp Community"
+          >
+            <MessageCircle className="w-4 h-4 fill-white text-white" />
+            <span className="whitespace-nowrap">VIP Group</span>
+          </a>
 
           {/* Direct WhatsApp Order CTA Button */}
           <a
@@ -303,12 +324,59 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
           </div>
 
+          {/* Highlighted Mobile WhatsApp VIP Community Card */}
+          <a
+            href={BRAND_WHATSAPP_GROUP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 text-white p-3.5 rounded-2xl flex items-center justify-between shadow-md shadow-emerald-600/25 border border-emerald-400/40"
+          >
+            <div className="flex items-center gap-2.5 text-left">
+              <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                <MessageCircle className="w-5 h-5 fill-white text-white" />
+              </div>
+              <div>
+                <div className="font-mono font-black text-xs uppercase tracking-wider">Join WhatsApp Group</div>
+                <div className="text-[11px] text-emerald-100 font-normal">Drop alerts, deals & trades</div>
+              </div>
+            </div>
+            <span className="bg-white text-emerald-950 text-[10px] font-mono font-black uppercase px-2 py-1 rounded-lg">
+              Join Free
+            </span>
+          </a>
+
           <div className="flex flex-col space-y-3 font-semibold text-sm">
             <button 
               onClick={() => handleNavClick('catalog')} 
               className="text-left text-zinc-800 hover:text-red-600 py-1"
             >
               Shop Catalog
+            </button>
+            <button 
+              onClick={() => handleNavClick('featured-hotwheels')} 
+              className="text-left text-zinc-900 hover:text-red-600 py-1 font-black uppercase text-sm flex items-center gap-2"
+            >
+              <Flame className="w-4 h-4 text-red-600 fill-red-600" />
+              <span>Hot Wheels Collection</span>
+            </button>
+            <button 
+              onClick={() => handleNavClick('collector-picks')} 
+              className="text-left text-zinc-800 hover:text-red-600 py-1 font-semibold"
+            >
+              Best Sellers & Picks
+            </button>
+            <button 
+              onClick={() => handleNavClick('premium-rare')} 
+              className="text-left text-zinc-800 hover:text-red-600 py-1 font-semibold"
+            >
+              Premiums & Rare Castings
+            </button>
+            <button 
+              onClick={() => handleNavClick('catalog')} 
+              className="text-left text-zinc-800 hover:text-red-600 py-1 font-semibold"
+            >
+              Full Garage Vault
             </button>
             <button 
               onClick={() => {
@@ -337,10 +405,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>AI Value Scanner</span>
             </button>
             <button 
-              onClick={() => handleNavClick('categories')} 
+              onClick={() => handleNavClick('other-collections')} 
               className="text-left text-zinc-800 hover:text-red-600 py-1"
             >
-              Bouquets & Frames
+              Bouquets, Frames & Custom Cards
             </button>
             <button 
               onClick={() => {

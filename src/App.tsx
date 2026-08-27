@@ -8,8 +8,13 @@ import { updateSEO } from './seo';
 import { ScrollProgressCar } from './components/ScrollProgressCar';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
-import { CategoryGrid } from './components/CategoryGrid';
+import { FeaturedHotWheelsSection } from './components/FeaturedHotWheelsSection';
+import { CollectorPicksSection } from './components/CollectorPicksSection';
+import { PremiumRareSection } from './components/PremiumRareSection';
+import { OtherCollectionsSection } from './components/OtherCollectionsSection';
+import { FinalCTASection } from './components/FinalCTASection';
 import { ProductCatalog } from './components/ProductCatalog';
+import { WhatsAppCommunityBanner } from './components/WhatsAppCommunityBanner';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { BrandedLoadingScreen } from './components/BrandedLoadingScreen';
@@ -533,7 +538,7 @@ export default function App() {
         }}
       />
 
-      {/* Hero Section */}
+      {/* 1. Hero Section (Hot Wheels Focused) */}
       <div id="hero">
         <HeroSection
           heroProduct={heroProduct}
@@ -543,15 +548,55 @@ export default function App() {
         />
       </div>
 
-      {/* Category Grid Section */}
-      <CategoryGrid 
-        categories={categoriesList}
-        isLoading={isInitialDataLoading}
-        onRetry={loadStoreData}
-        onSelectCategory={(catId: CategoryId) => handleSelectCategory(catId)} 
+      {/* 2. Featured Hot Wheels Collection (Immediate Focus) */}
+      <FeaturedHotWheelsSection
+        products={productsList}
+        onAddToCart={handleAddToCart}
+        onQuickView={(p) => handleOpenQuickView(p)}
+        onNavigateToCatalog={(cat) => {
+          if (cat) setSelectedCategory(cat);
+          handleNavigate('catalog');
+        }}
+        userProfile={customerProfile}
       />
 
-      {/* Product Catalog & Shop Grid */}
+      {/* Highlighted WhatsApp Collector VIP Community Banner */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-8 sm:my-12">
+        <WhatsAppCommunityBanner />
+      </section>
+
+      {/* 3. Best Sellers & Collector Picks */}
+      <CollectorPicksSection
+        products={productsList}
+        onAddToCart={handleAddToCart}
+        onQuickView={(p) => handleOpenQuickView(p)}
+        onNavigateToCatalog={(cat) => {
+          if (cat) setSelectedCategory(cat);
+          handleNavigate('catalog');
+        }}
+        userProfile={customerProfile}
+      />
+
+      {/* 4. Premium & Rare Hot Wheels (Real Riders & Chases) */}
+      <PremiumRareSection
+        products={productsList}
+        onAddToCart={handleAddToCart}
+        onQuickView={(p) => handleOpenQuickView(p)}
+        onNavigateToCatalog={(cat) => {
+          if (cat) setSelectedCategory(cat);
+          handleNavigate('catalog');
+        }}
+        userProfile={customerProfile}
+      />
+
+      {/* 5. Other Diecast Collections (Bouquets, Frames, Custom Cards) */}
+      <OtherCollectionsSection
+        categories={categoriesList}
+        isLoading={isInitialDataLoading}
+        onSelectCategory={(catId: CategoryId) => handleSelectCategory(catId)}
+      />
+
+      {/* Full Interactive Product Catalog & Search Grid */}
       <ProductCatalog
         products={productsList}
         categories={categoriesList}
@@ -581,14 +626,17 @@ export default function App() {
           }}
         />
 
-        {/* Why Redline Garage Trust Section */}
+        {/* 6. Why Shop With Us (The Redline Standard) */}
         <WhyRedline />
 
         {/* Collector of the Month Community Spotlight */}
         <CollectorSpotlightSection />
 
-        {/* Verified Testimonials */}
+        {/* 7. Customer Reviews & Collector Feedback */}
         <TestimonialsSection />
+
+        {/* 8. Final CTA (Ready to Level Up Your Hot Wheels Collection?) */}
+        <FinalCTASection onNavigate={handleNavigate} />
 
         {/* Order & Contact Channels Section */}
         <OrderAndContactSection onOpenCart={() => setIsCartOpen(true)} />
@@ -605,7 +653,7 @@ export default function App() {
         />
       </Suspense>
 
-      {/* Showroom Footer with Admin Portal Access & Track Order */}
+      {/* 9. Showroom Footer with Admin Portal Access & Track Order */}
       <Footer
         onNavigate={handleNavigate}
         onSelectCategory={handleSelectCategory}

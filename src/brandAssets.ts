@@ -23,6 +23,7 @@ export interface BrandAssetsConfig {
     readonly phone: string;
     readonly whatsapp: string;
     readonly whatsappNumber: string;
+    readonly whatsappGroupUrl: string;
     readonly instagram: string;
     readonly instagramUrl: string;
     readonly email: string;
@@ -55,6 +56,7 @@ export const BRAND_ASSETS: BrandAssetsConfig = {
     phone: '+91 8431294886',
     whatsapp: '+91 8431294886',
     whatsappNumber: '8431294886',
+    whatsappGroupUrl: 'https://chat.whatsapp.com/Jty9dKXDFVb7rTfEbcj1wW',
     instagram: '@redline_.garage',
     instagramUrl: 'https://www.instagram.com/redline_.garage/',
     email: 'shkofficialazman@gmail.com',
@@ -71,3 +73,4 @@ export const BRAND_NAME = BRAND_ASSETS.brandName;
 export const BRAND_TAGLINE = BRAND_ASSETS.tagline;
 export const BRAND_DOMAIN = BRAND_ASSETS.domain;
 export const BRAND_SITE_URL = BRAND_ASSETS.siteUrl;
+export const BRAND_WHATSAPP_GROUP_URL = BRAND_ASSETS.storeContact.whatsappGroupUrl;

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, ShieldCheck, Flame, Gift, Truck, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
+import { ArrowRight, Sparkles, ShieldCheck, Flame, Gift, Truck, ChevronLeft, ChevronRight, Camera, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
 import { ResponsiveImage } from './ResponsiveImage';
+import { BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface HeroSectionProps {
   heroProduct?: Product | null;
@@ -72,35 +73,48 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           
           {/* Left Column - Copy & Action Buttons */}
           <div className="lg:col-span-5 space-y-6 text-left">
-            {/* Tagline Badge */}
-            <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-red-600 tracking-wider uppercase shadow-xs">
-              <Flame className="w-4 h-4 text-red-600 fill-red-600 animate-bounce" />
-              <span>Premium Showroom Meets Nostalgia</span>
+            {/* Tagline Badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-1 rounded-full text-xs font-mono font-bold text-red-600 tracking-wider uppercase shadow-xs">
+                <Flame className="w-3.5 h-3.5 text-red-600 fill-red-600 animate-bounce" />
+                <span>India's Premier Hot Wheels Vault</span>
+              </div>
+              <a
+                href={BRAND_WHATSAPP_GROUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 px-3 py-1 rounded-full text-xs font-mono font-bold tracking-wide transition shadow-xs group"
+              >
+                <MessageCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600 group-hover:scale-110 transition-transform" />
+                <span>Join VIP WhatsApp Group</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </a>
             </div>
 
             {/* Main Headline */}
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight uppercase italic leading-[1.08] font-sans text-zinc-900">
-              Fuel Your <br />
+              Your Next <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-red-500 to-zinc-900">
-                Collections.
-              </span>
+                Hot Wheels
+              </span>{' '}
+              Is Waiting.
             </h1>
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider font-mono text-zinc-700">
-              Buy Authentic Hot Wheels Online in India — Bouquets, Frames & Custom Cards
+              Discover Hot Wheels mainlines, Premiums, rare finds & collector favourites.
             </h2>
 
             {/* Subtext */}
             <p className="text-sm sm:text-base text-zinc-600 max-w-xl font-normal leading-relaxed">
-              Transform authentic Hot Wheels die-cast cars into jaw-dropping bouquets, museum-grade shadowbox wall frames, and custom photo blister cards. The ultimate gift for car enthusiasts, collectors, and partners.
+              Explore authentic 1:64 scale Mattel Hot Wheels, metal/metal real riders, rare collector chases, custom blister photo cards, and museum-grade shadowbox wall frames. Mint condition guaranteed.
             </p>
 
             {/* CTAs */}
             <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3.5">
               <button
-                onClick={() => onNavigate('catalog')}
+                onClick={() => onNavigate('featured-hotwheels')}
                 className="w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-extrabold px-6 py-3.5 rounded-xl text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-red-600/25 hover:shadow-red-500/40 active:scale-95 group cursor-pointer min-h-[44px]"
               >
-                <span>Explore Garage</span>
+                <span>Explore Hot Wheels Collection</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
@@ -109,7 +123,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className="w-full sm:w-auto bg-white hover:bg-zinc-50 text-zinc-900 font-extrabold px-5 py-3.5 rounded-xl text-xs sm:text-sm uppercase tracking-wider border border-zinc-300 hover:border-red-600 flex items-center justify-center gap-2 transition-all active:scale-95 group shadow-xs cursor-pointer min-h-[44px]"
               >
                 <Camera className="w-4 h-4 text-red-600 group-hover:scale-110 transition-transform" />
-                <span>Scan Hot Wheels</span>
+                <span>AI Rarity Scanner</span>
               </button>
             </div>
 

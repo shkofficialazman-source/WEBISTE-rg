@@ -4,14 +4,12 @@ import { FirestoreOrder, UserProfile } from '../types';
 import { fetchCustomerOrdersFromFirestore } from '../firebase';
 import { fetchOrdersFromSupabase } from '../supabase';
 import { OrderHistoryStatus } from './OrderHistoryStatus';
-import { ReferCollectorSection } from './ReferCollectorSection';
-import { X, Package, Gift, RefreshCw } from 'lucide-react';
+import { X, Package, RefreshCw } from 'lucide-react';
 
 interface CustomerOrdersModalProps {
   isOpen: boolean;
   onClose: () => void;
   userProfile: UserProfile | null;
-  initialTab?: 'orders' | 'referrals';
 }
 
 /**
@@ -199,11 +197,9 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   isOpen,
   onClose,
   userProfile,
-  initialTab = 'orders',
 }) => {
   const [orders, setOrders] = useState<FirestoreOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'orders' | 'referrals'>(initialTab);
 
   const loadUserOrders = () => {
     if (!userProfile) return;
@@ -237,9 +233,8 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   useEffect(() => {
     if (isOpen && userProfile) {
       loadUserOrders();
-      setActiveTab(initialTab);
     }
-  }, [isOpen, userProfile, initialTab]);
+  }, [isOpen, userProfile]);
 
   if (!isOpen) return null;
 
@@ -268,13 +263,11 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
         <div className="p-4 sm:p-5 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-              {activeTab === 'orders' ? <Package className="w-5 h-5" /> : <Gift className="w-5 h-5" />}
+              <Package className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-extrabold text-base uppercase font-mono tracking-tight text-zinc-900">
-                {userProfile
-                  ? activeTab === 'orders' ? 'Collector Garage & Orders' : 'Refer a Collector'
-                  : 'Track My Orders'}
+                {userProfile ? 'Collector Garage & Orders' : 'Track My Orders'}
               </h3>
               <p className="text-xs text-zinc-500 font-mono truncate max-w-[200px] sm:max-w-md">
                 {userProfile ? `${userProfile.name} • ${userProfile.email}` : 'Look up order status & live courier tracking'}
@@ -282,7 +275,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {activeTab === 'orders' && userProfile && (
+            {userProfile && (
               <button
                 onClick={loadUserOrders}
                 disabled={loading}
@@ -302,47 +295,13 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
           </div>
         </div>
 
-        {/* Navigation Tabs (Only if user is logged in, else orders view only) */}
-        {userProfile && (
-          <div className="grid grid-cols-2 p-2 bg-zinc-100/80 border-b border-zinc-200 font-mono text-xs gap-1.5 shrink-0">
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[40px] ${
-                activeTab === 'orders'
-                  ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              <Package className="w-4 h-4 text-red-600" />
-              <span>Order History & Status</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('referrals')}
-              className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[40px] ${
-                activeTab === 'referrals'
-                  ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              <Gift className="w-4 h-4 text-red-600" />
-              <span>Refer a Collector</span>
-            </button>
-          </div>
-        )}
-
         {/* Modal Body */}
         <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
-          {activeTab === 'orders' ? (
-            <OrderHistoryStatus
-              orders={orders}
-              userProfile={userProfile}
-              loading={loading}
-            />
-          ) : (
-            <ReferCollectorSection
-              userProfile={userProfile}
-            />
-          )}
+          <OrderHistoryStatus
+            orders={orders}
+            userProfile={userProfile}
+            loading={loading}
+          />
         </div>
 
         {/* Modal Footer */}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShoppingBag, PhoneCall, Instagram, Mail, Clock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { ShoppingBag, PhoneCall, Instagram, Mail, Clock, ShieldCheck, ArrowRight, MessageCircle, Flame } from 'lucide-react';
+import { BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface OrderAndContactSectionProps {
   onOpenCart: () => void;
@@ -13,18 +14,18 @@ export const OrderAndContactSection: React.FC<OrderAndContactSectionProps> = ({ 
         {/* Title */}
         <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
           <div className="inline-flex items-center gap-2 text-xs font-mono font-bold text-red-600 uppercase tracking-widest bg-red-50 px-3.5 py-1.5 rounded-full border border-red-200">
-            <span>Frictionless Ordering</span>
+            <span>Frictionless Ordering & Community</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tight font-sans text-zinc-900">
             How Would You Like To <span className="text-red-600">Order</span>?
           </h2>
           <p className="text-zinc-600 text-sm font-normal">
-            We give you complete freedom. Complete your purchase right here on our website or order directly via WhatsApp or Instagram Concierge!
+            We give you complete freedom. Complete your purchase right here on our website, order directly via WhatsApp Concierge, or join our VIP Collector WhatsApp Group!
           </p>
         </div>
 
         {/* 2 Main Side-by-Side Ordering Channels */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto mb-12 sm:mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto mb-8 sm:mb-10">
           
           {/* Channel A: In-Site Express Checkout */}
           <div className="bg-zinc-50 border-2 border-red-600 rounded-3xl p-6 sm:p-8 text-left space-y-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
@@ -102,6 +103,35 @@ export const OrderAndContactSection: React.FC<OrderAndContactSectionProps> = ({ 
             </a>
           </div>
 
+        </div>
+
+        {/* Highlighted WhatsApp Group Invite Card */}
+        <div className="max-w-5xl mx-auto mb-12 bg-gradient-to-r from-zinc-900 via-emerald-950 to-zinc-900 border-2 border-emerald-500/50 rounded-2xl p-5 sm:p-6 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3.5 text-left">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold shrink-0 shadow-lg shadow-emerald-500/30">
+              <MessageCircle className="w-6 h-6 fill-zinc-950 text-zinc-950" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-[11px] uppercase bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-400/40">VIP Community</span>
+                <span className="text-amber-400 text-xs font-mono font-bold flex items-center gap-1">
+                  <Flame className="w-3 h-3 fill-amber-400" /> 1,200+ Members
+                </span>
+              </div>
+              <h4 className="text-lg font-black uppercase italic font-sans text-white">Hot Wheels Collector WhatsApp Group</h4>
+              <p className="text-zinc-300 text-xs font-normal">Get instant mainline case restock notifications, member discounts, and trade cards.</p>
+            </div>
+          </div>
+          <a
+            href={BRAND_WHATSAPP_GROUP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-zinc-950 font-black px-6 py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2 shrink-0 min-h-[44px]"
+          >
+            <MessageCircle className="w-4 h-4 fill-zinc-950" />
+            <span>Join Group Now</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </a>
         </div>
 
         {/* Contact Info Footer Grid */}

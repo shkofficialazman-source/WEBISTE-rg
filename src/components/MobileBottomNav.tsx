@@ -1,6 +1,7 @@
 import React from 'react';
-import { Home, Sparkles, ShoppingCart, ShoppingBag, MessageCircle, Package } from 'lucide-react';
+import { Home, Sparkles, ShoppingCart, ShoppingBag, MessageCircle, Package, Flame } from 'lucide-react';
 import { UserProfile } from '../types';
+import { BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface MobileBottomNavProps {
   cartCount: number;
@@ -74,15 +75,18 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <span className="text-[10px] font-mono font-bold tracking-tight uppercase text-zinc-900">Orders</span>
         </button>
 
-        {/* 4. WhatsApp Quick Concierge */}
+        {/* 4. WhatsApp VIP Community Group */}
         <a
-          href="https://wa.me/8431294886?text=Hi%20Redline%20Garage!%20I%20have%20a%20question%20about%20ordering."
+          href={BRAND_WHATSAPP_GROUP_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-emerald-600 active:bg-emerald-50 transition-all min-h-[48px]"
+          className="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-emerald-600 active:bg-emerald-50 transition-all min-h-[48px] relative"
         >
-          <MessageCircle className="w-5 h-5 mb-0.5" />
-          <span className="text-[10px] font-mono font-bold tracking-tight uppercase">Chat</span>
+          <div className="relative">
+            <MessageCircle className="w-5 h-5 mb-0.5" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+          </div>
+          <span className="text-[10px] font-mono font-bold tracking-tight uppercase text-emerald-700">VIP Club</span>
         </a>
 
         {/* 5. Cart with Live Badge */}

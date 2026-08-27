@@ -92,7 +92,6 @@ import {
 } from 'lucide-react';
 import { ImageCropperModal, AspectRatioOption } from './ImageCropperModal';
 import { convertUrlToFile } from '../../utils/imageCropUtils';
-import { ReferralCodesTab } from './ReferralCodesTab';
 import { LoyaltySettingsTab } from './LoyaltySettingsTab';
 import { SubscribersTab } from './SubscribersTab';
 import { CollectorSpotlightTab } from './CollectorSpotlightTab';
@@ -131,7 +130,7 @@ interface AdminDashboardProps {
   onBackToStore: () => void;
 }
 
-type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'inventory' | 'referrals' | 'loyalty' | 'spotlight' | 'subscribers';
+type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'inventory' | 'loyalty' | 'spotlight' | 'subscribers';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBackToStore }) => {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -1558,18 +1557,6 @@ If you need any assistance with your shipment, feel free to reply directly to th
           </button>
 
           <button
-            onClick={() => setCurrentTab('referrals')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-              currentTab === 'referrals'
-                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
-            }`}
-          >
-            <Tag className="w-4 h-4" />
-            <span>Referral Codes</span>
-          </button>
-
-          <button
             onClick={() => setCurrentTab('loyalty')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               currentTab === 'loyalty'
@@ -1787,13 +1774,6 @@ If you need any assistance with your shipment, feel free to reply directly to th
                     >
                       <ShoppingCart className="w-3 h-3 text-amber-400" />
                       <span>Fulfill Orders ({orders.filter(o => o.status === 'pending').length})</span>
-                    </button>
-                    <button
-                      onClick={() => setCurrentTab('referrals')}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-3 py-1.5 rounded-lg transition border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Tag className="w-3 h-3 text-emerald-400" />
-                      <span>Referral Codes</span>
                     </button>
                     <button
                       onClick={() => setCurrentTab('loyalty')}
@@ -2944,12 +2924,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
             )}
 
             {/* ========================================================= */}
-            {/* TAB 5: REFERRAL & PROMO CODES */}
-            {/* ========================================================= */}
-            {currentTab === 'referrals' && <ReferralCodesTab />}
-
-            {/* ========================================================= */}
-            {/* TAB 6: LOYALTY & REWARDS PROGRAM */}
+            {/* TAB 5: LOYALTY & REWARDS PROGRAM */}
             {/* ========================================================= */}
             {currentTab === 'loyalty' && <LoyaltySettingsTab />}
 

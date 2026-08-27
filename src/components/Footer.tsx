@@ -5,9 +5,10 @@ import {
   Mail,
   MapPin,
   RefreshCw,
+  MessageCircle,
 } from 'lucide-react';
 import { RedlineLogo } from './RedlineLogo';
-import { BRAND_ASSETS, BRAND_NAME, BRAND_TAGLINE } from '../brandAssets';
+import { BRAND_ASSETS, BRAND_NAME, BRAND_TAGLINE, BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface FooterProps {
   onNavigate: (sectionId: string) => void;
@@ -90,16 +91,26 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Direct Concierge Contact Links */}
           <div className="space-y-3">
             <h4 className="text-xs font-mono font-bold uppercase text-red-600 tracking-wider">
-              Order Channels
+              Order & Community
             </h4>
             <div className="space-y-2 text-xs font-mono">
+              <a
+                href={BRAND_WHATSAPP_GROUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1.5 rounded-lg transition-colors"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-600 fill-emerald-600" />
+                <span>Join VIP WhatsApp Group</span>
+              </a>
+
               <a
                 href="https://wa.me/8431294886"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 transition-colors"
+                className="flex items-center gap-2 text-zinc-700 hover:text-emerald-800 transition-colors"
               >
-                <PhoneCall className="w-4 h-4" />
+                <PhoneCall className="w-4 h-4 text-emerald-600" />
                 <span>WhatsApp (+91 8431294886)</span>
               </a>
 
