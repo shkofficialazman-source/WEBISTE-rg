@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CartItem, UserProfile, LoyaltyAccount, AiPaymentVerification } from '../types';
+import { CartItem, UserProfile, LoyaltyAccount, AiPaymentVerification, ReferralCode } from '../types';
 import { 
   X, Trash2, Plus, Minus, ShoppingBag, CheckCircle2, ArrowRight, Cloud, 
   MessageCircle, Copy, Check, Smartphone, ChevronLeft, AlertCircle, 
   Tag, Award, Sparkles, Send, ShieldAlert, ShieldCheck, Upload, Image as ImageIcon,
-  Camera, RefreshCw, Eye
+  Camera, RefreshCw, Eye, Gift, Percent
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { saveOrderToFirestore } from '../firebase';
 import { saveOrderToSupabase, validateInventoryAvailability } from '../supabase';
 import { appendOrderToGoogleSheet } from '../googleSheets';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getCachedLoyaltySettings } from '../loyalty';
+import { validateReferralCode, recordReferralCodeUsage, ACTIVE_REFERRAL_CODE_SESSION_KEY } from '../referrals';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface CartDrawerProps {
@@ -59,6 +60,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [loyaltyError, setLoyaltyError] = useState('');
   const [isCheckingLoyalty, setIsCheckingLoyalty] = useState(false);
 
+  // Referral / Promo Code State
+  const [referralInput, setReferralInput] = useState('');
+  const [appliedReferralCode, setAppliedReferralCode] = useState<ReferralCode | null>(null);
+  const [referralDiscountAmount, setReferralDiscountAmount] = useState(0);
+  const [referralError, setReferralError] = useState('');
+  const [referralSuccessMsg, setReferralSuccessMsg] = useState('');
+  const [isValidatingReferral, setIsValidatingReferral] = useState(false);
+
   const loyaltySettings = getCachedLoyaltySettings();
 
   const UPI_ID = 'shkofficialazman@okhdfcbank';
@@ -75,6 +84,40 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [userProfile]);
 
+  // Check if a referral code was stored in session or query param
+  useEffect(() => {
+    try {
+      const storedCode = sessionStorage.getItem(ACTIVE_REFERRAL_CODE_SESSION_KEY);
+      if (storedCode && !appliedReferralCode && cartItems.length > 0) {
+        setReferralInput(storedCode);
+        const currentSubtotal = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+        validateReferralCode(storedCode, currentSubtotal, phone, userProfile?.email).then(res => {
+          if (res.isValid && res.code) {
+            setAppliedReferralCode(res.code);
+            setReferralDiscountAmount(res.discountAmount);
+            setReferralSuccessMsg(res.message);
+          }
+        });
+      }
+    } catch {
+      // safe ignore
+    }
+  }, [cartItems.length, phone, userProfile]);
+
+  // Recalculate referral discount if subtotal changes
+  const subtotal = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+
+  useEffect(() => {
+    if (appliedReferralCode) {
+      if (appliedReferralCode.discountType === 'percentage') {
+        const newDiscount = Math.round((subtotal * appliedReferralCode.discountValue) / 100);
+        setReferralDiscountAmount(newDiscount);
+      } else {
+        setReferralDiscountAmount(Math.min(appliedReferralCode.discountValue, subtotal));
+      }
+    }
+  }, [subtotal, appliedReferralCode]);
+
   // Check loyalty points when phone is entered
   const handlePhoneBlur = async () => {
     if (phone.trim().length >= 10) {
@@ -90,9 +133,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   };
 
-  const subtotal = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+  const referralDiscount = referralDiscountAmount;
   const loyaltyDiscount = loyaltyDiscountAmount;
-  const grandTotal = Math.max(0, subtotal - loyaltyDiscount);
+  const grandTotal = Math.max(0, subtotal - referralDiscount - loyaltyDiscount);
 
   const upiParams = `pa=${UPI_ID}&pn=${encodeURIComponent(UPI_NAME)}&cu=INR&am=${grandTotal.toFixed(2)}&tn=${encodeURIComponent(`Redline Order ${orderNumber}`)}`;
   const upiPayUri = `upi://pay?${upiParams}`;
@@ -256,6 +299,61 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setLoyaltyError('');
   };
 
+  // Referral / Promo Code Handlers
+  const handleApplyReferralCode = async (codeToApply?: string) => {
+    const targetCode = (codeToApply || referralInput).trim();
+    setReferralError('');
+    setReferralSuccessMsg('');
+
+    if (!targetCode) {
+      setReferralError('Please enter a referral or coupon code.');
+      return;
+    }
+
+    setIsValidatingReferral(true);
+    try {
+      const res = await validateReferralCode(
+        targetCode,
+        subtotal,
+        phone.trim() || undefined,
+        userProfile?.email || undefined
+      );
+
+      if (!res.isValid || !res.code) {
+        setReferralError(res.message);
+        setAppliedReferralCode(null);
+        setReferralDiscountAmount(0);
+      } else {
+        setAppliedReferralCode(res.code);
+        setReferralDiscountAmount(res.discountAmount);
+        setReferralSuccessMsg(res.message);
+        setReferralInput(res.code.code);
+        try {
+          sessionStorage.setItem(ACTIVE_REFERRAL_CODE_SESSION_KEY, res.code.code);
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err: any) {
+      setReferralError('Could not validate code. Please try again.');
+    } finally {
+      setIsValidatingReferral(false);
+    }
+  };
+
+  const handleRemoveReferralCode = () => {
+    setAppliedReferralCode(null);
+    setReferralDiscountAmount(0);
+    setReferralInput('');
+    setReferralError('');
+    setReferralSuccessMsg('');
+    try {
+      sessionStorage.removeItem(ACTIVE_REFERRAL_CODE_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleProceedToCheckout = async () => {
     setCartError('');
     const check = await validateInventoryAvailability(
@@ -325,6 +423,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const message = encodeURIComponent(
       `Hello Redline Garage! 🚗💨\nI would like to place a Quick Order for my Cart items:\n\n${itemsText}\n\n` +
       `• Subtotal: ₹${subtotal.toFixed(2)}\n` +
+      (referralDiscount > 0 ? `• Referral / Promo (${appliedReferralCode?.code || 'DISCOUNT'}): -₹${referralDiscount.toFixed(2)}\n` : '') +
       (loyaltyDiscount > 0 ? `• Collector Loyalty Discount: -₹${loyaltyDiscount.toFixed(2)}\n` : '') +
       `• Express Delivery: FREE\n` +
       `• *Grand Total: ₹${grandTotal.toFixed(2)}*\n\n` +
@@ -364,6 +463,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       paymentMethod: chosenPaymentMethod === 'UPI' ? 'UPI' : 'WhatsApp / COD',
       paymentScreenshotUrl: screenshotDataUrl || undefined,
       aiVerification: aiVerificationResult || undefined,
+      referralCode: appliedReferralCode?.code || undefined,
+      referralDiscount: referralDiscount > 0 ? referralDiscount : undefined,
       loyaltyPointsUsed: loyaltyAppliedPoints > 0 ? loyaltyAppliedPoints : undefined,
       loyaltyDiscount: loyaltyDiscount > 0 ? loyaltyDiscount : undefined,
     };
@@ -385,14 +486,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       // 2. Mirror to Firestore
       await saveOrderToFirestore(orderPayload);
 
-      // 3. Deduct redeemed loyalty points if applied
+      // 3. Increment referral code usage count and total discount given in DB
+      if (appliedReferralCode && referralDiscount > 0) {
+        recordReferralCodeUsage(appliedReferralCode.code, referralDiscount, orderNumber).catch(err =>
+          console.warn('Referral usage logging notice:', err)
+        );
+      }
+
+      // 4. Deduct redeemed loyalty points if applied
       if (loyaltyAppliedPoints > 0 && phone.trim()) {
         redeemLoyaltyPoints(phone.trim(), loyaltyAppliedPoints, customerName, userProfile?.email).catch(err =>
           console.warn('Loyalty points deduction notice:', err)
         );
       }
 
-      // 4. Auto-append row to Google Sheets if connected
+      // 5. Auto-append row to Google Sheets if connected
       appendOrderToGoogleSheet(orderPayload).catch(e => console.warn('Google Sheets auto-append notice:', e));
     } catch (err: any) {
       console.warn('Order database sync notice:', err);
@@ -427,6 +535,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       .join('\n\n');
 
     let discountsText = '';
+    if (referralDiscount > 0) {
+      discountsText += `\n• Referral / Promo Code (${appliedReferralCode?.code}): -₹${referralDiscount.toFixed(2)}`;
+    }
     if (loyaltyDiscount > 0) {
       discountsText += `\n• Loyalty Points Redeemed (${loyaltyAppliedPoints} pts): -₹${loyaltyDiscount.toFixed(2)}`;
     }
@@ -703,6 +814,98 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             </div>
 
+            {/* Referral / Promo Code Redemption Card */}
+            <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-zinc-800 tracking-wider">
+                  <Tag className="w-3.5 h-3.5 text-red-600" />
+                  <span>Referral / Promo Code</span>
+                </div>
+                {appliedReferralCode && (
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    ✓ {appliedReferralCode.code} Active
+                  </span>
+                )}
+              </div>
+
+              {!appliedReferralCode ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={referralInput}
+                      onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. VIP-HOTWHEELS or WELCOME10"
+                      className="flex-1 bg-white border border-zinc-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-zinc-900 uppercase placeholder:normal-case focus:border-red-600 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isValidatingReferral || !referralInput.trim()}
+                      onClick={() => handleApplyReferralCode()}
+                      className="bg-zinc-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition cursor-pointer disabled:opacity-50 min-h-[38px]"
+                    >
+                      {isValidatingReferral ? 'Checking...' : 'Apply'}
+                    </button>
+                  </div>
+
+                  {referralError && (
+                    <div className="text-[11px] text-red-600 font-sans flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      <span>{referralError}</span>
+                    </div>
+                  )}
+
+                  {/* Fast Suggested Offers */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-zinc-500 font-mono">Popular codes:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferralInput('WELCOME10');
+                        handleApplyReferralCode('WELCOME10');
+                      }}
+                      className="bg-white border border-dashed border-red-300 hover:border-red-500 text-red-700 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                    >
+                      WELCOME10 (10% OFF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferralInput('REDLINE50');
+                        handleApplyReferralCode('REDLINE50');
+                      }}
+                      className="bg-white border border-dashed border-zinc-300 hover:border-zinc-500 text-zinc-700 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+                    >
+                      REDLINE50 (₹50 OFF)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
+                      %
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-emerald-900 font-mono">
+                        Code <span className="underline">{appliedReferralCode.code}</span> Applied!
+                      </div>
+                      <div className="text-[10px] text-emerald-700 font-mono">
+                        -₹{referralDiscountAmount.toFixed(2)} savings {appliedReferralCode.creatorName ? `(Referral by ${appliedReferralCode.creatorName})` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveReferralCode}
+                    className="text-xs text-red-600 hover:underline font-mono px-2 py-1 cursor-pointer font-bold"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Loyalty Points Redemption Card */}
             {loyaltySettings.loyaltyEnabled && (
               <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 space-y-2.5 shadow-xs">
@@ -824,6 +1027,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>Subtotal:</span>
                   <span className="font-bold text-zinc-900">₹{subtotal.toFixed(2)}</span>
                 </div>
+                {referralDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-700 text-[11px]">
+                    <span>Promo / Referral ({appliedReferralCode?.code}):</span>
+                    <span className="font-bold">-₹{referralDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 {loyaltyDiscount > 0 && (
                   <div className="flex justify-between text-amber-700 text-[11px]">
                     <span>Loyalty Points ({loyaltyAppliedPoints} pts):</span>
@@ -883,8 +1092,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="text-2xl sm:text-3xl font-black text-zinc-900 font-sans">
                   ₹{grandTotal.toFixed(2)}
                 </div>
-                {loyaltyDiscount > 0 && (
+                {referralDiscount > 0 && (
                   <div className="text-[10px] text-emerald-600 font-mono font-bold">
+                    ✓ Promo / Referral ({appliedReferralCode?.code}) applied: -₹{referralDiscount.toFixed(2)}
+                  </div>
+                )}
+                {loyaltyDiscount > 0 && (
+                  <div className="text-[10px] text-amber-600 font-mono font-bold">
                     ✓ Loyalty discount applied: -₹{loyaltyDiscount.toFixed(2)}
                   </div>
                 )}
@@ -1237,6 +1451,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <span>DELIVERY ADDRESS:</span>
                 <span className="truncate max-w-[180px]">{address}</span>
               </div>
+              {referralDiscount > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>PROMO / REFERRAL ({appliedReferralCode?.code}):</span>
+                  <span>-₹{referralDiscount.toFixed(2)}</span>
+                </div>
+              )}
               {loyaltyDiscount > 0 && (
                 <div className="flex justify-between text-amber-700">
                   <span>LOYALTY POINTS:</span>

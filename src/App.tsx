@@ -22,6 +22,7 @@ import { BRAND_ASSETS, BRAND_NAME } from './brandAssets';
 
 // Code-split heavy interactive components, modals, drawers, chatbot and admin portals for lightning initial load
 const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
+const ReferralClubSection = React.lazy(() => import('./components/ReferralClubSection').then(m => ({ default: m.ReferralClubSection })));
 const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
 const AskAiPitCrewSection = React.lazy(() => import('./components/AskAiPitCrewSection').then(m => ({ default: m.AskAiPitCrewSection })));
 const AskAiPitCrewModal = React.lazy(() => import('./components/AskAiPitCrewModal').then(m => ({ default: m.AskAiPitCrewModal })));
@@ -194,6 +195,17 @@ export default function App() {
         }, 150);
       }
     };
+
+    // Check for referral codes in query parameters (?ref=... or ?referral=... or ?coupon=...)
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const refParam = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('coupon');
+      if (refParam) {
+        sessionStorage.setItem('redline_active_referral_code', refParam.trim().toUpperCase());
+      }
+    } catch {
+      // safe ignore
+    }
 
     processHashRouting();
 
@@ -628,6 +640,12 @@ export default function App() {
 
         {/* 6. Why Shop With Us (The Redline Standard) */}
         <WhyRedline />
+
+        {/* Collector Referral Club — Share & Earn Section */}
+        <ReferralClubSection
+          userProfile={customerProfile}
+          onOpenCart={() => setIsCartOpen(true)}
+        />
 
         {/* Collector of the Month Community Spotlight */}
         <CollectorSpotlightSection />
