@@ -69,10 +69,12 @@ export const DEFAULT_REFERRAL_CODES: ReferralCode[] = [
 
 export const REFERRAL_SQL_SCHEMA = `-- =============================================================
 -- REDLINE GARAGE: REFERRAL & PROMO CODES SQL TABLE & RLS POLICIES
+-- Run this in your Supabase Project -> SQL Editor
 -- =============================================================
 
+-- 1. Create referral_codes table
 CREATE TABLE IF NOT EXISTS public.referral_codes (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT ('ref_' || gen_random_uuid()::text),
     code TEXT NOT NULL UNIQUE,
     discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'flat')),
     discount_value NUMERIC(10, 2) NOT NULL CHECK (discount_value > 0),
@@ -92,36 +94,57 @@ CREATE TABLE IF NOT EXISTS public.referral_codes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Optimization Indexes
+-- 2. Optimization Indexes
 CREATE INDEX IF NOT EXISTS idx_referral_codes_code ON public.referral_codes (UPPER(code));
 CREATE INDEX IF NOT EXISTS idx_referral_codes_active ON public.referral_codes (active);
 CREATE INDEX IF NOT EXISTS idx_referral_codes_creator_uid ON public.referral_codes (creator_uid);
 
--- Enable Row Level Security (RLS)
+-- 3. Enable Row Level Security (RLS)
 ALTER TABLE public.referral_codes ENABLE ROW LEVEL SECURITY;
 
--- Drop legacy policies if existing
+-- 4. Clean up prior policies if re-running
+DROP POLICY IF EXISTS "Allow public read active referral_codes" ON public.referral_codes;
 DROP POLICY IF EXISTS "Allow public read referral_codes" ON public.referral_codes;
-DROP POLICY IF EXISTS "Allow public insert referral_codes" ON public.referral_codes;
-DROP POLICY IF EXISTS "Allow public update referral_codes" ON public.referral_codes;
-DROP POLICY IF EXISTS "Allow public delete referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow authenticated admin full access on referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow admin modify referral_codes" ON public.referral_codes;
 
--- Full CRUD policies for public anon / authenticated web app clients
-CREATE POLICY "Allow public read referral_codes" ON public.referral_codes FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "Allow public insert referral_codes" ON public.referral_codes FOR INSERT TO anon, authenticated WITH CHECK (true);
-CREATE POLICY "Allow public update referral_codes" ON public.referral_codes FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public delete referral_codes" ON public.referral_codes FOR DELETE TO anon, authenticated USING (true);
+-- 5. RLS Policies:
+-- (A) Public / Anonymous / Authenticated customers can read active codes for checkout validation
+CREATE POLICY "Allow public read active referral_codes" 
+ON public.referral_codes 
+FOR SELECT 
+TO anon, authenticated 
+USING (active = true);
 
--- Seed Starter Promo & Referral Codes
+-- (B) Authenticated admin users have full INSERT, UPDATE, DELETE permissions
+CREATE POLICY "Allow authenticated admin full access on referral_codes" 
+ON public.referral_codes 
+FOR ALL 
+TO authenticated 
+USING (true) 
+WITH CHECK (true);
+
+-- (C) Allow applet admin client fallback modify
+CREATE POLICY "Allow app admin modify referral_codes" 
+ON public.referral_codes 
+FOR ALL 
+TO anon 
+USING (true) 
+WITH CHECK (true);
+
+-- 6. Seed starter referral & coupon codes
 INSERT INTO public.referral_codes (id, code, discount_type, discount_value, active, uses_count, min_order_amount, total_discount_given, is_collector_referral, creator_name)
 VALUES 
   ('ref-welcome10', 'WELCOME10', 'percentage', 10.00, true, 42, 0.00, 4200.00, false, 'Redline Garage Welcome Desk'),
   ('ref-redline50', 'REDLINE50', 'flat', 50.00, true, 28, 499.00, 1400.00, false, 'Standard Flat Offer'),
   ('ref-hotwheels15', 'HOTWHEELS15', 'percentage', 15.00, true, 19, 999.00, 3150.00, false, 'Diecast Collectors Special'),
   ('ref-vipcrew100', 'PITCREW100', 'flat', 100.00, true, 15, 1499.00, 1500.00, true, 'VIP Pit Crew Club')
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+  discount_type = EXCLUDED.discount_type,
+  discount_value = EXCLUDED.discount_value,
+  active = EXCLUDED.active;
 
--- Enable Realtime for Referral Updates
+-- 7. Enable Realtime subscriptions
 ALTER PUBLICATION supabase_realtime ADD TABLE public.referral_codes;
 `;
 

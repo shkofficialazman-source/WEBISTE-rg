@@ -4,7 +4,8 @@ import {
   FirestoreOrder,
   OrderStatus,
   CategoryId,
-  Category
+  Category,
+  ProductCollection,
 } from '../../types';
 import {
   auth,
@@ -36,8 +37,16 @@ import {
   addCategoryToSupabase,
   deleteCategoryFromSupabase,
   subscribeToCategories,
+  reorderCollectionsInSupabase,
+  fetchProductCollectionsFromSupabase,
+  assignProductToCollectionInSupabase,
+  removeProductFromCollectionInSupabase,
+  setProductCollectionsInSupabase,
+  reorderProductsInCollectionInSupabase,
+  subscribeToProductCollections,
   checkSupabaseConnection,
 } from '../../supabase';
+import { SUPABASE_COLLECTIONS_SQL } from '../../data/supabaseCollectionsSchema';
 
 import {
   LayoutDashboard,
@@ -89,16 +98,24 @@ import {
   ShieldCheck,
   ShieldAlert,
   Camera,
+  ArrowUp,
+  ArrowDown,
+  EyeOff,
+  Check,
+  Copy,
 } from 'lucide-react';
 import { ImageCropperModal, AspectRatioOption } from './ImageCropperModal';
 import { convertUrlToFile } from '../../utils/imageCropUtils';
 import { LoyaltySettingsTab } from './LoyaltySettingsTab';
 import { SubscribersTab } from './SubscribersTab';
 import { CollectorSpotlightTab } from './CollectorSpotlightTab';
+import { ReferralCodesTab } from './ReferralCodesTab';
+import { PromoBannerTab } from './PromoBannerTab';
+import { OrderTrackingTab } from './OrderTrackingTab';
 import { OrderStatusChip } from './OrderStatusChip';
 import { InvoiceModal } from '../InvoiceModal';
 import { RedlineLogo } from '../RedlineLogo';
-import { BrandedLoadingScreen } from '../BrandedLoadingScreen';
+import { LoadingSpinner } from '../LoadingSpinner';
 import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME } from '../../brandAssets';
 import { awardPointsForOrder } from '../../loyalty';
 import {
@@ -130,20 +147,27 @@ interface AdminDashboardProps {
   onBackToStore: () => void;
 }
 
-type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'inventory' | 'loyalty' | 'spotlight' | 'subscribers';
+type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'tracking' | 'inventory' | 'referrals' | 'promo' | 'loyalty' | 'spotlight' | 'subscribers';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBackToStore }) => {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<FirestoreOrder[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [productCollections, setProductCollections] = useState<ProductCollection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Collections (Categories) Management State
+  // Collections Management & Schema State
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isEditCategoryModalOpen, setIsEditCategoryModalOpen] = useState(false);
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
+  const [managingCategoryProducts, setManagingCategoryProducts] = useState<Category | null>(null);
+  const [isReorderingCategories, setIsReorderingCategories] = useState(false);
+  const [isReorderingProductsInCollection, setIsReorderingProductsInCollection] = useState(false);
+  const [categoryProductSearch, setCategoryProductSearch] = useState('');
+  const [showCollectionsSqlModal, setShowCollectionsSqlModal] = useState(false);
+  const [copiedCollectionsSql, setCopiedCollectionsSql] = useState(false);
   const [categoryFormData, setCategoryFormData] = useState({
     id: '',
     name: '',
@@ -151,6 +175,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBack
     badge: '',
     image: '',
     icon: 'Car',
+    parentId: '' as string,
+    active: true,
+    sortOrder: 0,
   });
   const [isUploadingCategoryCover, setIsUploadingCategoryCover] = useState(false);
   const [categoryUploadSuccess, setCategoryUploadSuccess] = useState(false);
@@ -199,10 +226,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBack
   const [cropModalSubtitle, setCropModalSubtitle] = useState('Frame your diecast item for catalog cards (1:1 square recommended).');
   const [isPreparingReCrop, setIsPreparingReCrop] = useState(false);
 
-  // Form state for Add/Edit product with multi-image gallery support
+  // Form state for Add/Edit product with multi-image gallery and multi-collection assignment support
   const [formData, setFormData] = useState({
     name: '',
     category: 'bouquets' as CategoryId,
+    assignedCollectionIds: ['bouquets'] as string[],
     price: 499,
     originalPrice: 599,
     stockCount: 10,
@@ -296,8 +324,21 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;`;
   const [trackingModalOrder, setTrackingModalOrder] = useState<FirestoreOrder | null>(null);
   const [trackingForm, setTrackingForm] = useState({ courierName: '', trackingNumber: '', trackingUrl: '' });
   const [isSavingTracking, setIsSavingTracking] = useState(false);
+  const [copiedTrackingOrderId, setCopiedTrackingOrderId] = useState<string | null>(null);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<FirestoreOrder | null>(null);
   const [inspectingVerificationOrder, setInspectingVerificationOrder] = useState<FirestoreOrder | null>(null);
+
+  // Helper to copy tracking link to clipboard
+  const handleCopyTrackingLink = (order: FirestoreOrder) => {
+    const courier = order.courierName || 'Courier';
+    const awb = order.trackingNumber || '';
+    const trackingUrl = order.trackingUrl || getCourierTrackingLink(courier, awb);
+    if (!trackingUrl) return;
+
+    navigator.clipboard.writeText(trackingUrl);
+    setCopiedTrackingOrderId(order.id || order.orderNumber);
+    setTimeout(() => setCopiedTrackingOrderId(null), 2500);
+  };
 
   // Helper to build direct courier tracking URL
   const getCourierTrackingLink = (courierName: string, trackingNumber: string): string => {
@@ -436,14 +477,16 @@ If you need any assistance with your shipment, feel free to reply directly to th
         setSupabaseStatus(status);
       }).catch(() => {});
 
-      const [fetchedProducts, fetchedOrders, fetchedCategories] = await Promise.all([
+      const [fetchedProducts, fetchedOrders, fetchedCategories, fetchedProductCollections] = await Promise.all([
         fetchProductsFromSupabase(),
         fetchOrdersFromSupabase(),
         fetchCategoriesFromSupabase(),
+        fetchProductCollectionsFromSupabase().catch(() => [] as ProductCollection[]),
       ]);
       setProducts(fetchedProducts);
       setOrders(fetchedOrders);
       setCategories(fetchedCategories);
+      setProductCollections(fetchedProductCollections);
     } catch (err) {
       console.error('Error loading Supabase data:', err);
     } finally {
@@ -468,10 +511,15 @@ If you need any assistance with your shipment, feel free to reply directly to th
       setCategories(freshCategories);
     });
 
+    const unsubProductCollections = subscribeToProductCollections((freshProductCols) => {
+      setProductCollections(freshProductCols);
+    });
+
     return () => {
       unsubProducts();
       unsubOrders();
       unsubCategories();
+      unsubProductCollections();
     };
   }, []);
 
@@ -500,9 +548,11 @@ If you need any assistance with your shipment, feel free to reply directly to th
   // -------------------------------------------------------------
   const handleOpenAddModal = () => {
     const defaultImg = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?q=80&w=800&auto=format&fit=crop';
+    const primaryCat = (categories[0]?.id as CategoryId) || 'bouquets';
     setFormData({
       name: '',
-      category: (categories[0]?.id as CategoryId) || 'bouquets',
+      category: primaryCat,
+      assignedCollectionIds: [primaryCat],
       price: 499,
       originalPrice: 599,
       stockCount: 10,
@@ -539,9 +589,24 @@ If you need any assistance with your shipment, feel free to reply directly to th
 
     const mainImage = product.image || initialGallery[0] || '';
 
+    // Collect existing collection assignments from productCollections junction state + product model
+    const junctionColIds = productCollections
+      .filter(pc => (pc.productId === product.id || pc.product_id === product.id))
+      .map(pc => pc.collectionId || pc.collection_id || '');
+    
+    const combinedColIds = Array.from(
+      new Set([
+        product.category,
+        product.collectionId,
+        ...(product.collectionIds || []),
+        ...junctionColIds,
+      ].filter(Boolean))
+    ) as string[];
+
     setFormData({
       name: product.name,
       category: product.category,
+      assignedCollectionIds: combinedColIds.length > 0 ? combinedColIds : [product.category],
       price: product.price,
       originalPrice: product.originalPrice || Math.round(product.price * 1.2),
       stockCount: product.stockCount,
@@ -862,11 +927,20 @@ If you need any assistance with your shipment, feel free to reply directly to th
     setProductSaveError(null);
 
     try {
+      const assignedCols = Array.from(
+        new Set([
+          formData.category,
+          ...(formData.assignedCollectionIds || []),
+        ].filter(Boolean))
+      );
+
       if (editingProduct) {
         // Update existing product in Supabase
         const updates: Partial<Product> = {
           name: formData.name,
           category: formData.category,
+          collectionId: formData.category,
+          collectionIds: assignedCols,
           price: Number(formData.price),
           originalPrice: Number(formData.originalPrice),
           stockCount: Number(formData.stockCount),
@@ -881,16 +955,26 @@ If you need any assistance with your shipment, feel free to reply directly to th
         if (!res.success) {
           throw new Error(res.error || 'Failed to save product updates in database');
         }
+
+        // Sync to product_collections table
+        await setProductCollectionsInSupabase(editingProduct.id, assignedCols);
+
         updateProductInFirestore(editingProduct.id, updates).catch(err =>
           console.warn('Firestore mirror notice:', err)
         );
-        const fresh = await fetchProductsFromSupabase();
+        const [fresh, freshPc] = await Promise.all([
+          fetchProductsFromSupabase(),
+          fetchProductCollectionsFromSupabase().catch(() => []),
+        ]);
         setProducts(fresh);
+        if (freshPc && freshPc.length > 0) setProductCollections(freshPc);
       } else {
         // Add new product directly to Supabase
         const newProductPayload = {
           name: formData.name,
           category: formData.category,
+          collectionId: formData.category,
+          collectionIds: assignedCols,
           price: Number(formData.price),
           originalPrice: Number(formData.originalPrice),
           stockCount: Number(formData.stockCount),
@@ -914,14 +998,21 @@ If you need any assistance with your shipment, feel free to reply directly to th
         };
 
         const newProduct = await addProductToSupabase(newProductPayload);
+
+        // Sync to product_collections table
+        await setProductCollectionsInSupabase(newProduct.id, assignedCols);
         
         // Mirror to Firestore in background
         addProductToFirestore({ ...newProductPayload, id: newProduct.id }).catch(err => 
           console.warn('Firestore mirror notice:', err)
         );
 
-        const fresh = await fetchProductsFromSupabase();
+        const [fresh, freshPc] = await Promise.all([
+          fetchProductsFromSupabase(),
+          fetchProductCollectionsFromSupabase().catch(() => []),
+        ]);
         setProducts(fresh);
+        if (freshPc && freshPc.length > 0) setProductCollections(freshPc);
       }
       setIsAddModalOpen(false);
     } catch (err: any) {
@@ -1129,6 +1220,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
       badge: '',
       image: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=800&auto=format&fit=crop',
       icon: 'Car',
+      parentId: '',
+      active: true,
+      sortOrder: categories.length + 1,
     });
     setCategoryUploadError('');
     setCategoryUploadSuccess(false);
@@ -1143,9 +1237,12 @@ If you need any assistance with your shipment, feel free to reply directly to th
       id: cat.id,
       name: cat.name,
       tagline: cat.tagline,
-      badge: cat.badge,
+      badge: cat.badge || '',
       image: cat.image,
       icon: cat.icon || 'Car',
+      parentId: cat.parentId || '',
+      active: cat.active !== false,
+      sortOrder: cat.sortOrder || 0,
     });
     setCategoryUploadError('');
     setCategoryUploadSuccess(false);
@@ -1174,6 +1271,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
           badge: categoryFormData.badge,
           image: categoryFormData.image,
           icon: categoryFormData.icon,
+          parentId: categoryFormData.parentId || null,
+          active: categoryFormData.active,
+          sortOrder: categoryFormData.sortOrder,
         });
 
         setCategories(prev =>
@@ -1186,6 +1286,9 @@ If you need any assistance with your shipment, feel free to reply directly to th
                   badge: categoryFormData.badge,
                   image: categoryFormData.image,
                   icon: categoryFormData.icon,
+                  parentId: categoryFormData.parentId || null,
+                  active: categoryFormData.active,
+                  sortOrder: categoryFormData.sortOrder,
                 }
               : c
           )
@@ -1212,6 +1315,8 @@ If you need any assistance with your shipment, feel free to reply directly to th
           badge: categoryFormData.badge,
           image: categoryFormData.image,
           icon: categoryFormData.icon,
+          parentId: categoryFormData.parentId || null,
+          active: categoryFormData.active,
           sortOrder: categories.length + 1,
         });
 
@@ -1245,6 +1350,158 @@ If you need any assistance with your shipment, feel free to reply directly to th
     } finally {
       setIsDeletingCategory(false);
     }
+  };
+
+  const handleReorderCategory = async (catId: string, direction: 'up' | 'down') => {
+    const currentIndex = categories.findIndex(c => c.id === catId);
+    if (currentIndex < 0) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+
+    const newCategories = [...categories];
+    const [moved] = newCategories.splice(currentIndex, 1);
+    newCategories.splice(targetIndex, 0, moved);
+
+    // Update sortOrder numbers
+    const updated = newCategories.map((c, idx) => ({ ...c, sortOrder: idx + 1 }));
+    setCategories(updated);
+
+    setIsReorderingCategories(true);
+    try {
+      await reorderCollectionsInSupabase(updated.map(c => c.id));
+    } catch (err) {
+      console.warn('Supabase reorder notice:', err);
+    } finally {
+      setIsReorderingCategories(false);
+    }
+  };
+
+  const handleToggleCategoryActive = async (cat: Category) => {
+    const nextActive = cat.active === false ? true : false;
+    setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, active: nextActive } : c)));
+    try {
+      await updateCategoryInSupabase(cat.id, { active: nextActive });
+    } catch (err) {
+      console.warn('Failed to update category active status:', err);
+    }
+  };
+
+  const handleAssignProductToCategory = async (productId: string, targetCategoryId: string) => {
+    await handleAssignProductToCollection(productId, targetCategoryId);
+  };
+
+  const getProductsInCollection = (collectionId: string): Product[] => {
+    // 1. Find productCollections mappings for this collection, ordered by displayOrder
+    const mappings = productCollections
+      .filter(pc => (pc.collectionId === collectionId || pc.collection_id === collectionId))
+      .sort((a, b) => ((a.displayOrder ?? a.display_order ?? 0) - (b.displayOrder ?? b.display_order ?? 0)));
+
+    const matchedProductIds = mappings.map(m => m.productId || m.product_id || '');
+    
+    // 2. Map found products
+    const mappedProducts: Product[] = [];
+    matchedProductIds.forEach(pId => {
+      const prod = products.find(p => p.id === pId);
+      if (prod && !mappedProducts.some(mp => mp.id === prod.id)) {
+        mappedProducts.push(prod);
+      }
+    });
+
+    // 3. Include products that have collectionId or category or collectionIds matching
+    const fallbackProducts = products.filter(p => {
+      const isDirectMatch = (p.category === collectionId || p.collectionId === collectionId || (p.collectionIds && p.collectionIds.includes(collectionId)));
+      return isDirectMatch && !mappedProducts.some(mp => mp.id === p.id);
+    });
+
+    return [...mappedProducts, ...fallbackProducts];
+  };
+
+  const handleAssignProductToCollection = async (productId: string, collectionId: string) => {
+    try {
+      await assignProductToCollectionInSupabase(productId, collectionId);
+      setProductCollections(prev => {
+        const exists = prev.some(pc => (pc.productId === productId || pc.product_id === productId) && (pc.collectionId === collectionId || pc.collection_id === collectionId));
+        if (exists) return prev;
+        return [...prev, { productId, collectionId, displayOrder: prev.length + 1 }];
+      });
+      setProducts(prev =>
+        prev.map(p => {
+          if (p.id === productId) {
+            const currentIds = p.collectionIds || [p.category];
+            const newIds = currentIds.includes(collectionId) ? currentIds : [...currentIds, collectionId];
+            return { ...p, collectionIds: newIds };
+          }
+          return p;
+        })
+      );
+    } catch (err: any) {
+      console.error('Failed to assign product to collection:', err);
+      alert(`Could not assign product: ${err?.message || 'Database error'}`);
+    }
+  };
+
+  const handleRemoveProductFromCollection = async (productId: string, collectionId: string) => {
+    try {
+      await removeProductFromCollectionInSupabase(productId, collectionId);
+      setProductCollections(prev =>
+        prev.filter(pc => !((pc.productId === productId || pc.product_id === productId) && (pc.collectionId === collectionId || pc.collection_id === collectionId)))
+      );
+      setProducts(prev =>
+        prev.map(p => {
+          if (p.id === productId) {
+            const newIds = (p.collectionIds || [p.category]).filter(id => id !== collectionId);
+            return { ...p, collectionIds: newIds };
+          }
+          return p;
+        })
+      );
+    } catch (err: any) {
+      console.error('Failed to remove product from collection:', err);
+      alert(`Could not remove product from collection: ${err?.message || 'Database error'}`);
+    }
+  };
+
+  const handleReorderProductInCollection = async (collectionId: string, productId: string, direction: 'up' | 'down') => {
+    const collectionItems = getProductsInCollection(collectionId);
+    const currentIndex = collectionItems.findIndex(p => p.id === productId);
+    if (currentIndex < 0) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= collectionItems.length) return;
+
+    const reordered = [...collectionItems];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const orderedIds = reordered.map(p => p.id);
+
+    // Optimistically update productCollections display orders
+    setProductCollections(prev => {
+      return prev.map(pc => {
+        if (pc.collectionId === collectionId || pc.collection_id === collectionId) {
+          const pId = pc.productId || pc.product_id || '';
+          const newOrder = orderedIds.indexOf(pId) + 1;
+          if (newOrder > 0) {
+            return { ...pc, displayOrder: newOrder, display_order: newOrder };
+          }
+        }
+        return pc;
+      });
+    });
+
+    setIsReorderingProductsInCollection(true);
+    try {
+      await reorderProductsInCollectionInSupabase(collectionId, orderedIds);
+    } catch (err) {
+      console.warn('Failed to reorder products in collection:', err);
+    } finally {
+      setIsReorderingProductsInCollection(false);
+    }
+  };
+
+  const handleCopyCollectionsSqlScript = () => {
+    navigator.clipboard.writeText(SUPABASE_COLLECTIONS_SQL);
+    setCopiedCollectionsSql(true);
+    setTimeout(() => setCopiedCollectionsSql(false), 4000);
   };
 
   const getCategoryIcon = (iconName: string) => {
@@ -1540,6 +1797,18 @@ If you need any assistance with your shipment, feel free to reply directly to th
           </button>
 
           <button
+            onClick={() => setCurrentTab('tracking')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              currentTab === 'tracking'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+            }`}
+          >
+            <Truck className="w-4 h-4" />
+            <span>Order Tracking</span>
+          </button>
+
+          <button
             onClick={() => setCurrentTab('inventory')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               currentTab === 'inventory'
@@ -1554,6 +1823,30 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 {inventoryMetrics.lowStockProducts.length + inventoryMetrics.outOfStockProducts.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('referrals')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              currentTab === 'referrals'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>Referral Codes</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('promo')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              currentTab === 'promo'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Promo Banner</span>
           </button>
 
           <button
@@ -1598,12 +1891,8 @@ If you need any assistance with your shipment, feel free to reply directly to th
       {/* Content Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
         {isLoading ? (
-          <div className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-xs">
-            <BrandedLoadingScreen
-              fullScreen={false}
-              message="Syncing Redline Garage Database..."
-              submessage="Pulling latest orders, products, inventory valuations & Supabase sync"
-            />
+          <div className="bg-white border border-zinc-200 rounded-3xl p-12 shadow-xs flex flex-col items-center justify-center">
+            <LoadingSpinner size="lg" label="Syncing Redline Garage Database & live inventory..." />
           </div>
         ) : (
           <>
@@ -2060,7 +2349,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-3">
                                     <img
-                                      src={prod.image}
+                                      src={prod.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
                                       alt={prod.name}
                                       className="w-12 h-12 object-cover rounded-lg border border-zinc-200 shrink-0 bg-zinc-100"
                                     />
@@ -2195,6 +2484,15 @@ If you need any assistance with your shipment, feel free to reply directly to th
 
                   <div className="flex items-center gap-3 self-start sm:self-auto flex-wrap">
                     <button
+                      type="button"
+                      onClick={() => setShowCollectionsSqlModal(true)}
+                      className="bg-zinc-900 hover:bg-black text-zinc-200 hover:text-white text-xs font-mono font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition-all border border-zinc-700 shadow-xs cursor-pointer"
+                    >
+                      <Tag className="w-3.5 h-3.5 text-red-500" />
+                      <span>SQL Schema</span>
+                    </button>
+
+                    <button
                       onClick={handleOpenAddCategory}
                       className="bg-red-600 hover:bg-red-700 text-white text-xs font-mono font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md shadow-red-600/20 cursor-pointer active:scale-95"
                     >
@@ -2214,74 +2512,158 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 </div>
 
                 {/* Collections Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {categories.map((cat) => (
-                    <div
-                      key={cat.id}
-                      className="group bg-white border border-zinc-200 hover:border-red-600/60 rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between transition-all duration-300 hover:-translate-y-1"
-                    >
-                      {/* Image Preview Area */}
-                      <div className="relative aspect-4/3 overflow-hidden bg-zinc-100">
-                        <img
-                          src={cat.image}
-                          alt={cat.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {categories.map((cat, index) => {
+                    const linkedProductsCount = products.filter(
+                      p =>
+                        p.category === cat.id ||
+                        p.collectionId === cat.id ||
+                        (p.collectionIds && p.collectionIds.includes(cat.id))
+                    ).length;
 
-                        {/* Badge */}
-                        {cat.badge && (
-                          <div className="absolute top-3 left-3 bg-red-600 text-white font-mono font-bold text-[10px] uppercase px-2.5 py-1 rounded-md tracking-wider shadow-md">
-                            {cat.badge}
+                    return (
+                      <div
+                        key={cat.id}
+                        className={`group bg-white border rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 ${
+                          cat.active === false
+                            ? 'border-zinc-300 opacity-75 bg-zinc-50/50'
+                            : 'border-zinc-200 hover:border-red-600/60'
+                        }`}
+                      >
+                        {/* Image Preview Area */}
+                        <div className="relative aspect-4/3 overflow-hidden bg-zinc-100">
+                          <img
+                            src={cat.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
+                            alt={cat.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+
+                          {/* Order Position Badge + Reordering Buttons */}
+                          <div className="absolute top-3 left-3 flex items-center gap-1 bg-black/75 backdrop-blur-xs text-white px-2 py-1 rounded-lg border border-white/20 text-[10px] font-mono font-bold">
+                            <span>#{index + 1}</span>
+                            <div className="flex items-center ml-1 border-l border-white/20 pl-1">
+                              <button
+                                type="button"
+                                disabled={index === 0 || isReorderingCategories}
+                                onClick={() => handleReorderCategory(cat.id, 'up')}
+                                title="Move Up in Storefront Order"
+                                className="p-0.5 hover:text-red-400 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === categories.length - 1 || isReorderingCategories}
+                                onClick={() => handleReorderCategory(cat.id, 'down')}
+                                title="Move Down in Storefront Order"
+                                className="p-0.5 hover:text-red-400 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
-                        )}
 
-                        {/* Category ID tag */}
-                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-xs text-zinc-200 font-mono text-[10px] px-2 py-0.5 rounded border border-white/20">
-                          {cat.id}
+                          {/* Active / Hidden Status Pill */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCategoryActive(cat)}
+                            title="Click to toggle Active / Hidden on storefront"
+                            className={`absolute top-3 right-3 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition border ${
+                              cat.active !== false
+                                ? 'bg-emerald-600/90 text-white border-emerald-400/50 hover:bg-emerald-700'
+                                : 'bg-zinc-800/90 text-zinc-300 border-zinc-600 hover:bg-zinc-900'
+                            }`}
+                          >
+                            {cat.active !== false ? (
+                              <>
+                                <Eye className="w-3 h-3 text-emerald-200" />
+                                <span>Active</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3 text-zinc-400" />
+                                <span>Hidden</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Badge if present */}
+                          {cat.badge && (
+                            <div className="absolute bottom-3 left-3 bg-red-600 text-white font-mono font-bold text-[10px] uppercase px-2 py-0.5 rounded shadow-md">
+                              {cat.badge}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Info & Details */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              {getCategoryIcon(cat.icon)}
+                              <h3 className="text-sm font-black uppercase text-zinc-900 font-sans tracking-tight">
+                                {cat.name}
+                              </h3>
+                            </div>
+
+                            {cat.parentId && (
+                              <div className="text-[10px] font-mono text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded inline-block">
+                                ↳ Sub-collection of: <span className="font-bold text-zinc-700">{cat.parentId}</span>
+                              </div>
+                            )}
+
+                            <p className="text-xs text-zinc-600 leading-relaxed font-light line-clamp-2">
+                              {cat.tagline}
+                            </p>
+                          </div>
+
+                          {/* Action Buttons & Manage Products */}
+                          <div className="pt-3 border-t border-zinc-200 space-y-2">
+                            <div className="flex items-center justify-between text-[11px] font-mono">
+                              <span className="text-zinc-500">
+                                {linkedProductsCount} linked item{linkedProductsCount === 1 ? '' : 's'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManagingCategoryProducts(cat);
+                                  setCategoryProductSearch('');
+                                }}
+                                className="text-red-600 hover:text-red-700 font-bold underline cursor-pointer hover:bg-red-50 px-1.5 py-0.5 rounded"
+                              >
+                                Manage Products →
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 pt-1">
+                              <span className="text-[10px] font-mono text-zinc-400 truncate">
+                                ID: {cat.id}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditCategory(cat)}
+                                  className="bg-zinc-100 hover:bg-red-600 hover:text-white text-zinc-700 font-mono text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingCategoryId(cat.id)}
+                                  title="Delete Collection"
+                                  className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-
-                      {/* Info & Details */}
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            {getCategoryIcon(cat.icon)}
-                            <h3 className="text-base font-black uppercase text-zinc-900 font-sans">
-                              {cat.name}
-                            </h3>
-                          </div>
-                          <p className="text-xs text-zinc-600 leading-relaxed font-light line-clamp-3">
-                            {cat.tagline}
-                          </p>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="pt-3 border-t border-zinc-200 flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-mono text-zinc-500 uppercase truncate">
-                            Linked: {products.filter(p => p.category === cat.id).length}
-                          </span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              onClick={() => handleOpenEditCategory(cat)}
-                              className="bg-red-600 hover:bg-red-700 text-white font-mono text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md shadow-red-600/20 cursor-pointer"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              onClick={() => setDeletingCategoryId(cat.id)}
-                              title="Delete Collection"
-                              className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2734,14 +3116,34 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                         <div className="font-mono text-sky-800 break-all select-all font-semibold text-[10px]">
                                           AWB: {order.trackingNumber}
                                         </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleShareTrackingWhatsApp(order)}
-                                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[9px] font-bold py-1 px-1.5 rounded flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
-                                        >
-                                          <MessageCircle className="w-3 h-3 text-white" />
-                                          <span>WhatsApp Customer</span>
-                                        </button>
+                                        <div className="flex items-center gap-1.5 pt-0.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyTrackingLink(order)}
+                                            className="flex-1 bg-white hover:bg-zinc-100 text-zinc-700 border border-sky-300 font-mono text-[9px] font-bold py-1 px-1.5 rounded flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
+                                            title="Copy direct tracking URL to clipboard"
+                                          >
+                                            {copiedTrackingOrderId === (order.id || order.orderNumber) ? (
+                                              <>
+                                                <Check className="w-3 h-3 text-emerald-600" />
+                                                <span className="text-emerald-700">Copied!</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Copy className="w-3 h-3 text-sky-600" />
+                                                <span>Copy Link</span>
+                                              </>
+                                            )}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleShareTrackingWhatsApp(order)}
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[9px] font-bold py-1 px-1.5 rounded flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
+                                          >
+                                            <MessageCircle className="w-3 h-3 text-white" />
+                                            <span>WhatsApp</span>
+                                          </button>
+                                        </div>
                                       </div>
                                     ) : (
                                       (order.status === 'shipped' || order.status === 'confirmed') && (
@@ -2860,7 +3262,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
                       {inventoryMetrics.outOfStockProducts.map((p) => (
                         <div key={p.id} className="py-3 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <img src={p.image} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
+                            <img src={p.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
                             <div>
                               <div className="font-bold text-sm text-zinc-900">{p.name}</div>
                               <div className="text-[11px] text-zinc-500 font-mono">Price: ₹{p.price.toFixed(2)} • {p.category}</div>
@@ -2900,7 +3302,7 @@ If you need any assistance with your shipment, feel free to reply directly to th
                       {inventoryMetrics.lowStockProducts.map((p) => (
                         <div key={p.id} className="py-3 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <img src={p.image} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
+                            <img src={p.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
                             <div>
                               <div className="font-bold text-sm text-zinc-900">{p.name}</div>
                               <div className="text-[11px] text-red-600 font-mono font-bold">Only {p.stockCount} units remaining in stock</div>
@@ -2922,6 +3324,21 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 </div>
               </div>
             )}
+
+            {/* ========================================================= */}
+            {/* TAB: ORDER TRACKING & COURIER DISPATCH */}
+            {/* ========================================================= */}
+            {currentTab === 'tracking' && <OrderTrackingTab />}
+
+            {/* ========================================================= */}
+            {/* TAB: REFERRAL & PROMO CODES */}
+            {/* ========================================================= */}
+            {currentTab === 'referrals' && <ReferralCodesTab />}
+
+            {/* ========================================================= */}
+            {/* TAB: PROMO BANNER SETTINGS */}
+            {/* ========================================================= */}
+            {currentTab === 'promo' && <PromoBannerTab />}
 
             {/* ========================================================= */}
             {/* TAB 5: LOYALTY & REWARDS PROGRAM */}
@@ -2974,10 +3391,21 @@ If you need any assistance with your shipment, feel free to reply directly to th
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-zinc-700 uppercase text-[10px] mb-1 font-bold">Category</label>
+                  <label className="block text-zinc-700 uppercase text-[10px] mb-1 font-bold">Primary Collection</label>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as CategoryId })}
+                    onChange={(e) => {
+                      const newCat = e.target.value as CategoryId;
+                      const currentAssigned = formData.assignedCollectionIds || [];
+                      const updatedAssigned = currentAssigned.includes(newCat)
+                        ? currentAssigned
+                        : [...currentAssigned, newCat];
+                      setFormData({
+                        ...formData,
+                        category: newCat,
+                        assignedCollectionIds: updatedAssigned,
+                      });
+                    }}
                     className="w-full bg-zinc-50 border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl px-3 py-2.5 text-xs focus:outline-hidden"
                   >
                     {categories.map((c) => (
@@ -3009,6 +3437,70 @@ If you need any assistance with your shipment, feel free to reply directly to th
                     onChange={(e) => setFormData({ ...formData, stockCount: parseInt(e.target.value) || 0 })}
                     className="w-full bg-zinc-50 border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl px-3 py-2.5 text-xs focus:outline-hidden"
                   />
+                </div>
+              </div>
+
+              {/* Multi-Collection Selection (Junction table mapping) */}
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-zinc-700 uppercase text-[10px] font-bold">
+                    Assigned Showroom Collections ({formData.assignedCollectionIds?.length || 1})
+                  </label>
+                  <span className="text-[9px] text-zinc-500">
+                    Product appears in all checked collections
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {categories.map(c => {
+                    const isSelected = (formData.assignedCollectionIds || []).includes(c.id);
+                    const isPrimary = formData.category === c.id;
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          const currentList = formData.assignedCollectionIds || [];
+                          let nextList: string[];
+                          if (isSelected) {
+                            // Don't allow removing if it's the only one or primary
+                            if (currentList.length <= 1) return;
+                            nextList = currentList.filter(id => id !== c.id);
+                            // If we deselected the primary category, switch primary to first remaining
+                            if (isPrimary && nextList.length > 0) {
+                              setFormData({
+                                ...formData,
+                                category: nextList[0] as CategoryId,
+                                assignedCollectionIds: nextList,
+                              });
+                              return;
+                            }
+                          } else {
+                            nextList = [...currentList, c.id];
+                          }
+                          setFormData({
+                            ...formData,
+                            assignedCollectionIds: nextList,
+                          });
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1.5 transition border cursor-pointer ${
+                          isSelected
+                            ? isPrimary
+                              ? 'bg-red-600 text-white border-red-600 font-bold shadow-xs'
+                              : 'bg-zinc-900 text-white border-zinc-900 font-bold'
+                            : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-current" />}
+                        <span>{c.name}</span>
+                        {isPrimary && (
+                          <span className="bg-black/40 text-[9px] px-1 py-0.2 rounded uppercase">
+                            Primary
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3363,18 +3855,92 @@ If you need any assistance with your shipment, feel free to reply directly to th
                 />
               </div>
 
-              {/* Badge Text */}
-              <div>
-                <label className="block text-zinc-700 uppercase text-[10px] font-bold mb-1">
-                  Badge Text (e.g. Most Gifted, Wall Art, Collector Vault, New)
-                </label>
-                <input
-                  type="text"
-                  value={categoryFormData.badge}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, badge: e.target.value })}
-                  placeholder="e.g. Most Gifted"
-                  className="w-full bg-zinc-50 border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl px-3 py-2.5 text-xs focus:outline-hidden"
-                />
+              {/* Parent Collection & Hierarchy */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-700 uppercase text-[10px] font-bold mb-1">
+                    Parent Collection (Optional)
+                  </label>
+                  <select
+                    value={categoryFormData.parentId}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, parentId: e.target.value })}
+                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl px-3 py-2.5 text-xs focus:outline-hidden"
+                  >
+                    <option value="">None (Top-Level Collection)</option>
+                    {categories
+                      .filter(c => (!editingCategory || c.id !== editingCategory.id) && (!c.parentId || c.parentId === 'root'))
+                      .map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.id})
+                        </option>
+                      ))}
+                  </select>
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    e.g. Choose "Hot Wheels Customize" for Bouquets, Cards, Frames.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 uppercase text-[10px] font-bold mb-1">
+                    Display Order / Sequence
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={categoryFormData.sortOrder}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, sortOrder: parseInt(e.target.value) || 1 })}
+                    className="w-full bg-zinc-50 border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl px-3 py-2.5 text-xs focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    Controls position on the storefront navigation bar.
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Toggle & Icon Picker */}
+              <div className="space-y-2 pt-1 border-t border-zinc-100">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={categoryFormData.active}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, active: e.target.checked })}
+                      className="accent-red-600 rounded w-4 h-4"
+                    />
+                    <span className="text-zinc-800 font-bold text-xs">Active on Storefront</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 uppercase text-[10px] font-bold mb-1.5">
+                    Collection Icon
+                  </label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { name: 'Car', icon: <Car className="w-4 h-4" /> },
+                      { name: 'Sparkles', icon: <Sparkles className="w-4 h-4" /> },
+                      { name: 'Flower2', icon: <Flower2 className="w-4 h-4" /> },
+                      { name: 'Frame', icon: <Frame className="w-4 h-4" /> },
+                      { name: 'Flame', icon: <Flame className="w-4 h-4" /> },
+                      { name: 'Star', icon: <Star className="w-4 h-4" /> },
+                      { name: 'Package', icon: <Package className="w-4 h-4" /> },
+                    ].map(item => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => setCategoryFormData({ ...categoryFormData, icon: item.name })}
+                        className={`p-2 rounded-xl border flex items-center gap-1.5 text-xs font-mono transition cursor-pointer ${
+                          categoryFormData.icon === item.name
+                            ? 'bg-red-50 border-red-600 text-red-600 font-bold'
+                            : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
+                        }`}
+                      >
+                        {item.icon}
+                        <span>{item.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* COVER IMAGE UPLOAD & PREVIEW */}
@@ -3509,8 +4075,302 @@ If you need any assistance with your shipment, feel free to reply directly to th
       )}
 
       {/* ========================================================= */}
-      {/* DELETE PRODUCT CONFIRMATION MODAL */}
+      {/* MANAGE COLLECTION PRODUCTS MODAL */}
       {/* ========================================================= */}
+      {managingCategoryProducts && (() => {
+        const collectionProducts = getProductsInCollection(managingCategoryProducts.id);
+        const assignedIds = collectionProducts.map(p => p.id);
+
+        return (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6">
+            <div className="bg-white border border-zinc-200 rounded-3xl max-w-3xl w-full p-6 shadow-2xl relative font-mono max-h-[90vh] flex flex-col">
+              {/* Close Button */}
+              <button
+                onClick={() => setManagingCategoryProducts(null)}
+                className="absolute top-5 right-5 text-zinc-400 hover:text-zinc-700 p-1.5 rounded-xl hover:bg-zinc-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Modal Header */}
+              <div className="flex items-center gap-3.5 pb-4 border-b border-zinc-200 shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
+                  {getCategoryIcon(managingCategoryProducts.icon)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black uppercase text-zinc-900 font-sans">
+                      {managingCategoryProducts.name}
+                    </h3>
+                    <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">
+                      {managingCategoryProducts.id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-sans">
+                    Manage product assignments, display sequence, and ordering in this collection.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-y-auto py-4 space-y-6 flex-1 pr-1">
+                {/* Quick Add Product to this Collection */}
+                <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-800 uppercase flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-red-600" />
+                      Add Product to this Collection
+                    </span>
+                    <span className="text-[10px] text-zinc-500">
+                      Search catalog to assign products
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={categoryProductSearch}
+                      onChange={(e) => setCategoryProductSearch(e.target.value)}
+                      placeholder="Search product name or SKU to assign to this collection..."
+                      className="w-full bg-white border border-zinc-200 focus:border-red-600 text-zinc-900 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* Filtered Search Results for Unassigned Products */}
+                  {categoryProductSearch.trim().length > 0 && (
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pt-2 border-t border-zinc-200">
+                      {products
+                        .filter(
+                          p =>
+                            !assignedIds.includes(p.id) &&
+                            (p.name.toLowerCase().includes(categoryProductSearch.toLowerCase()) ||
+                              p.id.toLowerCase().includes(categoryProductSearch.toLowerCase()))
+                        )
+                        .slice(0, 8)
+                        .map(prod => (
+                          <div
+                            key={prod.id}
+                            className="flex items-center justify-between bg-white border border-zinc-200 rounded-xl p-2 hover:border-zinc-300 transition text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <img
+                                src={prod.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
+                                alt={prod.name}
+                                referrerPolicy="no-referrer"
+                                className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0"
+                              />
+                              <div className="truncate">
+                                <span className="font-bold text-zinc-900 font-sans block truncate">{prod.name}</span>
+                                <span className="text-[10px] text-zinc-500">Primary: {prod.category} • ₹{prod.price}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleAssignProductToCollection(prod.id, managingCategoryProducts.id);
+                                setCategoryProductSearch('');
+                              }}
+                              className="bg-red-600 hover:bg-red-700 text-white font-mono text-[11px] font-bold px-3 py-1.5 rounded-lg shrink-0 flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+ Add to Collection</span>
+                            </button>
+                          </div>
+                        ))}
+                      {products.filter(
+                        p =>
+                          !assignedIds.includes(p.id) &&
+                          p.name.toLowerCase().includes(categoryProductSearch.toLowerCase())
+                      ).length === 0 && (
+                        <p className="text-center text-xs text-zinc-400 py-2">
+                          No other unassigned products matching "{categoryProductSearch}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Current Products in this Collection with Sequence & Ordering */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-zinc-900 uppercase">
+                      Products in this Collection ({collectionProducts.length})
+                    </h4>
+                    <span className="text-[10px] text-zinc-500">
+                      Use Up/Down arrows to control display sequence
+                    </span>
+                  </div>
+
+                  {collectionProducts.length === 0 ? (
+                    <div className="p-8 rounded-2xl border border-dashed border-zinc-300 text-center space-y-2 bg-zinc-50">
+                      <Package className="w-8 h-8 text-zinc-400 mx-auto" />
+                      <p className="text-xs text-zinc-600 font-sans">
+                        No products are currently assigned to <strong>{managingCategoryProducts.name}</strong>.
+                      </p>
+                      <p className="text-[11px] text-zinc-400">
+                        Use the search bar above to assign products, or edit any product in the Products tab.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {collectionProducts.map((prod, pIndex) => (
+                        <div
+                          key={prod.id}
+                          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white border border-zinc-200 rounded-2xl p-3 hover:border-zinc-300 transition"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Sequence Badge + Order Controls */}
+                            <div className="flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded-lg border border-zinc-200 text-[10px] font-mono font-bold text-zinc-700 shrink-0">
+                              <span>#{pIndex + 1}</span>
+                              <div className="flex items-center ml-1 border-l border-zinc-300 pl-1">
+                                <button
+                                  type="button"
+                                  disabled={pIndex === 0 || isReorderingProductsInCollection}
+                                  onClick={() => handleReorderProductInCollection(managingCategoryProducts.id, prod.id, 'up')}
+                                  title="Move Earlier in this Collection"
+                                  className="p-0.5 hover:text-red-600 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={pIndex === collectionProducts.length - 1 || isReorderingProductsInCollection}
+                                  onClick={() => handleReorderProductInCollection(managingCategoryProducts.id, prod.id, 'down')}
+                                  title="Move Later in this Collection"
+                                  className="p-0.5 hover:text-red-600 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <img
+                              src={prod.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
+                              alt={prod.name}
+                              referrerPolicy="no-referrer"
+                              className="w-10 h-10 rounded-xl object-cover border border-zinc-200 shrink-0"
+                            />
+                            <div className="truncate">
+                              <span className="font-bold text-zinc-900 font-sans text-xs block truncate">
+                                {prod.name}
+                              </span>
+                              <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono mt-0.5">
+                                <span>₹{prod.price}</span>
+                                <span>•</span>
+                                <span>Stock: {prod.stockCount ?? 0}</span>
+                                {prod.category === managingCategoryProducts.id && (
+                                  <span className="bg-red-50 text-red-700 text-[9px] px-1.5 py-0.2 rounded font-bold border border-red-200">
+                                    PRIMARY
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions: Remove & Primary Reassign */}
+                          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductFromCollection(prod.id, managingCategoryProducts.id)}
+                              className="px-2.5 py-1 text-[11px] font-mono font-bold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 transition cursor-pointer flex items-center gap-1"
+                              title="Remove product from this collection"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-zinc-200 flex items-center justify-between shrink-0">
+                <span className="text-[11px] text-zinc-400">
+                  Changes save automatically to database
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setManagingCategoryProducts(null)}
+                  className="px-5 py-2.5 bg-zinc-900 hover:bg-black text-white font-bold rounded-xl transition font-mono uppercase text-xs cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ========================================================= */}
+      {/* COLLECTIONS & PRODUCT_COLLECTIONS SUPABASE SQL MODAL */}
+      {/* ========================================================= */}
+      {showCollectionsSqlModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative font-mono text-xs text-zinc-200 max-h-[90vh] flex flex-col">
+            <button
+              onClick={() => setShowCollectionsSqlModal(false)}
+              className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-red-500 font-mono text-xs font-bold uppercase mb-1">
+              <Tag className="w-4 h-4" />
+              <span>Supabase Relational Database Setup</span>
+            </div>
+
+            <h3 className="text-base font-black uppercase text-white font-sans mb-1">
+              Collections & Product-Collections Tables SQL
+            </h3>
+
+            <p className="text-zinc-400 text-[11px] mb-4 font-sans leading-relaxed">
+              Run this SQL script in your <strong>Supabase Project &gt; SQL Editor</strong> to create the dedicated <code className="text-red-400 bg-zinc-900 px-1 py-0.5 rounded">collections</code> and <code className="text-red-400 bg-zinc-900 px-1 py-0.5 rounded">product_collections</code> relational tables with RLS policies and seed data.
+            </p>
+
+            <div className="relative flex-1 min-h-0 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col mb-4">
+              <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/90 border-b border-zinc-800 shrink-0">
+                <span className="text-[10px] text-zinc-500 font-mono">schema.sql</span>
+                <button
+                  type="button"
+                  onClick={handleCopyCollectionsSqlScript}
+                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  {copiedCollectionsSql ? (
+                    <>
+                      <Check className="w-3 h-3 text-white" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-3 h-3" />
+                      <span>Copy SQL</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="p-4 overflow-y-auto font-mono text-[11px] text-emerald-400 leading-relaxed flex-1 selection:bg-red-600/30">
+                {SUPABASE_COLLECTIONS_SQL}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800 shrink-0">
+              <span className="text-[10px] text-zinc-500">
+                Supports dual-write backward compatibility
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCollectionsSqlModal(false)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition text-xs cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {deletingProductId && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-zinc-200 rounded-2xl max-w-sm w-full p-6 shadow-2xl font-mono text-xs text-center space-y-4">

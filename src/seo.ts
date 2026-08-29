@@ -1,13 +1,15 @@
-import { Product } from './types';
+import { Product, Collection } from './types';
 import { FAQS } from './data/extraData';
 import { BRAND_ASSETS, BRAND_LOGO_PATH, BRAND_NAME, BRAND_TAGLINE, BRAND_SITE_URL } from './brandAssets';
 
 export type PageType = 
   | 'home' 
   | 'shop' 
+  | 'collection'
   | 'product' 
   | 'scanner' 
   | 'customizer' 
+  | 'track-order'
   | 'why-us' 
   | 'faq' 
   | 'login' 
@@ -21,6 +23,8 @@ export interface SEOConfig {
   url?: string;
   product?: Product | null;
   categoryName?: string;
+  collection?: Collection | null;
+  collectionSlug?: string;
 }
 
 const DEFAULT_TITLE = 'Redline Garage | Buy Authentic Hot Wheels Online in India — Collector Cars, Gifts & Bouquets';
@@ -39,17 +43,24 @@ export const getSEOTitle = (config: SEOConfig): string => {
   }
   if (config.title) return config.title;
 
+  if (config.collection) {
+    return `${config.collection.name} Collection | Buy Authentic Die-Cast Online in India — Redline Garage`;
+  }
+
   if (config.categoryName) {
     return `${config.categoryName} — Buy Authentic Hot Wheels Online in India | Redline Garage`;
   }
 
   switch (config.pageType) {
     case 'shop':
+    case 'collection':
       return 'Shop Hot Wheels Online | Mainline, Premium, Treasure Hunt & Vintage — Redline Garage';
     case 'scanner':
       return 'Hot Wheels Value Scanner — AI-Powered Price Estimator | Redline Garage';
     case 'customizer':
       return 'Custom Hot Wheels Card Maker | Personalized Blister Pack Photo Gift — Redline Garage';
+    case 'track-order':
+      return 'Track Your Order Live — Courier & Shipment Milestones | Redline Garage India';
     case 'why-us':
       return 'Why Redline Garage | India’s #1 Authentic Hot Wheels & Die-Cast Studio';
     case 'faq':
@@ -78,6 +89,11 @@ export const getSEODescription = (config: SEOConfig): string => {
   }
   if (config.description) return config.description;
 
+  if (config.collection) {
+    const desc = config.collection.description || config.collection.tagline || 'Curated 100% genuine die-cast models';
+    return `${desc.slice(0, 120)}. 100% genuine die-cast models, mint collector packaging, fast nationwide dispatch across India.`;
+  }
+
   if (config.categoryName) {
     return `Browse our curated collection of authentic ${config.categoryName}. 100% genuine Mattel die-cast cars, mint blister cards, fast dispatch & express delivery across India.`;
   }
@@ -89,6 +105,8 @@ export const getSEODescription = (config: SEOConfig): string => {
       return 'Free AI Hot Wheels value scanner. Upload a photo of any blister card or loose casting to instantly check model details, rarity, and estimated market price in INR.';
     case 'customizer':
       return 'Design a personalized Hot Wheels blister card with your photo and custom name. Premium 350 GSM cardstock, official blister bubble, and die-cast car included.';
+    case 'track-order':
+      return 'Track your die-cast package live across India. Enter your mobile number to view DTDC, Blue Dart, Delhivery consignment status and dispatch milestones.';
     case 'why-us':
       return 'Discover why 2,500+ collectors trust Redline Garage for genuine Mattel die-cast cars, white-glove packaging, 24-48H express dispatch & COD options across India.';
     case 'faq':
@@ -117,6 +135,8 @@ export const updateSEO = (config: SEOConfig) => {
   if (!pageUrl && typeof window !== 'undefined') {
     if (config.product) {
       pageUrl = `${window.location.origin}/?product=${encodeURIComponent(config.product.id)}`;
+    } else if (config.collection) {
+      pageUrl = `${window.location.origin}/${encodeURIComponent(config.collection.slug)}`;
     } else {
       pageUrl = window.location.href;
     }

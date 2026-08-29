@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera,
   Upload,
@@ -6,29 +6,37 @@ import {
   AlertCircle,
   RefreshCw,
   MessageCircle,
-  HelpCircle,
   ShieldCheck,
   Tag,
-  Info,
   ArrowRight,
-  Flame,
   WifiOff,
-  Clock,
-  Server,
-  AlertTriangle,
-  Cpu,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Crosshair,
+  TrendingUp,
+  Search,
+  Sliders,
+  History,
+  Info,
+  Car,
+  ChevronRight,
+  Flame,
+  Award,
+  Zap,
+  ArrowLeft,
+  X
 } from 'lucide-react';
 
-interface ScanResultData {
+export interface ScanResultData {
   isHotWheelsOrDiecast: boolean;
   carModelName: string;
+  brand?: string;
   seriesAndYear: string;
   categoryType: string;
   conditionAssessment: string;
   estimatedValueMinINR: number;
   estimatedValueMaxINR: number;
+  reasoningTags?: string[];
   valueExplanation: string;
   collectorTip: string;
   confidenceLevel: string;
@@ -43,20 +51,52 @@ export type ScannerErrorType =
   | 'unrecognized_car'
   | 'general';
 
-/**
- * Resizes and optimizes user-uploaded photos on the client side using HTML5 Canvas.
- * Caps maximum dimension at 1200px and encodes as 85% JPEG to prevent payload bloat,
- * ensuring fast transmission to the Gemini API while preserving fine tampo & wheel details.
- */
+interface ValueScannerProps {
+  onNavigate?: (route: string) => void;
+}
+
+const SAMPLE_PRESETS = [
+  {
+    name: '1971 Datsun 510 Wagon ($TH)',
+    brand: 'Hot Wheels',
+    condition: 'Mint on Card (Carded)',
+    category: 'Super Treasure Hunt ($TH)',
+    desc: 'Spectraflame green with Real Riders 4-spoke wheels and gold flame card logo.',
+  },
+  {
+    name: 'Nissan Skyline GT-R (BNR34) Nismo',
+    brand: 'Mini GT',
+    condition: 'Sealed Box / Acrylic Case',
+    category: 'Mini GT Collector Grade',
+    desc: 'Bayside Blue collector grade #344 with authentic decals and rubber wheels.',
+  },
+  {
+    name: 'Porsche 911 GT3 RS',
+    brand: 'Hot Wheels',
+    condition: 'Mint on Card (Carded)',
+    category: 'Premium / Real Riders',
+    desc: 'Car Culture: Deutschland Design with metal base and full racing livery.',
+  },
+  {
+    name: 'Volkswagen T1 Deluxe Bus',
+    brand: 'Majorette',
+    condition: 'Mint on Card (Carded)',
+    category: 'Majorette Deluxe / Vintage',
+    desc: 'Opening rear engine hatch, working suspension, and vintage collector metal box.',
+  },
+];
+
 const compressImageForAI = async (
   source: string | File,
-  maxDimension = 1200,
-  quality = 0.85
-): Promise<string> => {
+  maxDimension = 1400,
+  quality = 0.88
+): Promise<{ base64: string; mimeType: string }> => {
   return new Promise((resolve, reject) => {
-    const processImage = (img: HTMLImageElement, fallbackData: string) => {
+    const processImage = (img: HTMLImageElement, fallbackData: string, mime = 'image/jpeg') => {
       try {
-        let { width, height } = img;
+        let width = img.naturalWidth || img.width || 800;
+        let height = img.naturalHeight || img.height || 600;
+
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
             height = Math.round((height * maxDimension) / width);
@@ -68,22 +108,22 @@ const compressImageForAI = async (
         }
 
         const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(fallbackData);
+          resolve({ base64: fallbackData, mimeType: mime });
           return;
         }
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataUrl);
+        resolve({ base64: compressedDataUrl, mimeType: 'image/jpeg' });
       } catch (err) {
-        console.warn('[ValueScanner] Canvas compression issue, falling back to original data:', err);
-        resolve(fallbackData);
+        console.warn('[ValueScanner] Canvas compression fallback:', err);
+        resolve({ base64: fallbackData, mimeType: mime });
       }
     };
 
@@ -91,7 +131,7 @@ const compressImageForAI = async (
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => processImage(img, source);
-      img.onerror = () => resolve(source);
+      img.onerror = () => resolve({ base64: source, mimeType: 'image/jpeg' });
       img.src = source;
       return;
     }
@@ -99,9 +139,10 @@ const compressImageForAI = async (
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
+      const mime = source.type || 'image/jpeg';
       const img = new Image();
-      img.onload = () => processImage(img, dataUrl);
-      img.onerror = () => resolve(dataUrl);
+      img.onload = () => processImage(img, dataUrl, mime);
+      img.onerror = () => resolve({ base64: dataUrl, mimeType: mime });
       img.src = dataUrl;
     };
     reader.onerror = () => {
@@ -111,31 +152,61 @@ const compressImageForAI = async (
   });
 };
 
-export const ValueScanner: React.FC = () => {
+export const ValueScanner: React.FC<ValueScannerProps> = ({ onNavigate }) => {
+  // Input states
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
+  const [modelNameInput, setModelNameInput] = useState<string>('');
+  const [selectedBrand, setSelectedBrand] = useState<string>('Hot Wheels');
+  const [selectedCondition, setSelectedCondition] = useState<string>('Mint on Card (Carded)');
+  const [notesInput, setNotesInput] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'photo' | 'manual'>('photo');
+
+  // Scanner status states
   const [isScanning, setIsScanning] = useState(false);
-  const [scanningStatus, setScanningStatus] = useState<string>('Uploading photo to AI valuation engine...');
+  const [scanningStatus, setScanningStatus] = useState<string>('Initializing Gemini Neural Appraiser...');
   const [scanResult, setScanResult] = useState<ScanResultData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<ScannerErrorType | null>(null);
-  const [rawDiagnosticError, setRawDiagnosticError] = useState<string | null>(null);
-  const [showDiagnosticTrace, setShowDiagnosticTrace] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  // History of session scans
+  const [scanHistory, setScanHistory] = useState<Array<{ timestamp: number; result: ScanResultData; image?: string | null }>>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Load history from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('redline_scanner_history');
+      if (saved) {
+        setScanHistory(JSON.parse(saved).slice(0, 6));
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  const saveToHistory = (result: ScanResultData, img?: string | null) => {
+    try {
+      const updated = [{ timestamp: Date.now(), result, image: img || null }, ...scanHistory.filter(h => h.result.carModelName !== result.carModelName)].slice(0, 6);
+      setScanHistory(updated);
+      localStorage.setItem('redline_scanner_history', JSON.stringify(updated));
+    } catch {
+      // Ignore localStorage errors
+    }
+  };
+
   const handleImageUpload = async (file: File) => {
-    // Basic file validation
     if (!file.type.startsWith('image/')) {
-      console.warn('[ValueScanner] Invalid file uploaded:', { fileName: file.name, type: file.type });
-      setErrorMessage('Please upload a valid image file (JPG, PNG, or WEBP).');
+      setErrorMessage('Please upload a valid photo (JPG, PNG, or WEBP).');
       setErrorType('invalid_input');
       return;
     }
 
     if (file.size > 25 * 1024 * 1024) {
-      setErrorMessage('The photo file size is too large (max 25MB). Please choose a smaller photo.');
+      setErrorMessage('Photo file size is too large (max 25MB).');
       setErrorType('invalid_input');
       return;
     }
@@ -143,27 +214,16 @@ export const ValueScanner: React.FC = () => {
     setErrorMessage(null);
     setErrorType(null);
     setScanResult(null);
+    setCurrentFileName(file.name);
 
     try {
-      setScanningStatus('Optimizing photo resolution for AI appraisal...');
-      setIsScanning(true);
-      const optimizedBase64 = await compressImageForAI(file, 1200, 0.85);
-      setSelectedImage(optimizedBase64);
-      triggerScan(optimizedBase64);
+      const { base64, mimeType } = await compressImageForAI(file, 1200, 0.85);
+      setSelectedImage(base64);
+      triggerScan({ imageBase64: base64, mimeType, fileName: file.name });
     } catch (err: any) {
-      console.warn('[ValueScanner] Optimization warning, falling back to direct reader:', err);
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setSelectedImage(base64);
-        triggerScan(base64);
-      };
-      reader.onerror = () => {
-        setIsScanning(false);
-        setErrorMessage('Failed to read image file. Please try selecting the photo again.');
-        setErrorType('invalid_input');
-      };
-      reader.readAsDataURL(file);
+      console.error('[ValueScanner] Image compression error:', err);
+      setErrorMessage('Failed to read image file. Please try selecting another photo.');
+      setErrorType('invalid_input');
     }
   };
 
@@ -172,149 +232,96 @@ export const ValueScanner: React.FC = () => {
     if (file) {
       handleImageUpload(file);
     }
+    e.target.value = '';
   };
 
-  const triggerScan = async (imageBase64: string) => {
+  const triggerScan = async (params: {
+    imageBase64?: string | null;
+    mimeType?: string;
+    fileName?: string;
+    modelName?: string;
+    brand?: string;
+    condition?: string;
+    notes?: string;
+  }) => {
     setIsScanning(true);
     setErrorMessage(null);
     setErrorType(null);
-    setRawDiagnosticError(null);
-    setShowDiagnosticTrace(false);
-    setScanningStatus('Connecting to Gemini AI Valuation Service...');
+    setScanResult(null);
 
-    console.log('[ValueScanner Real Photo Scan Request Initiated]:', {
-      timestamp: new Date().toISOString(),
-      payloadLength: imageBase64.length,
-      isDataUrl: imageBase64.startsWith('data:image/'),
-      targetEndpoint: '/api/gemini/scan-hotwheels',
-    });
-
-    // Dynamic progressive status updates for user engagement
-    const timer1 = setTimeout(() => {
-      setScanningStatus('Examining casting silhouette, rooflines & blister card...');
-    }, 1800);
-
-    const timer2 = setTimeout(() => {
-      setScanningStatus('Detecting tampo liveries, wheel specifications & series badges...');
-    }, 4200);
-
-    const timer3 = setTimeout(() => {
-      setScanningStatus('Checking Indian secondary collector market valuation ranges...');
-    }, 7500);
+    const img = params.imageBase64 || selectedImage;
+    const model = params.modelName || modelNameInput;
+    const brand = params.brand || selectedBrand;
+    const condition = params.condition || selectedCondition;
+    const notes = params.notes || notesInput;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    const timer1 = setTimeout(() => setScanningStatus('Detecting casting lines, tampos & card series...'), 1200);
+    const timer2 = setTimeout(() => setScanningStatus('Analyzing rarity tier & Indian secondary market demand...'), 2600);
+    const timer3 = setTimeout(() => setScanningStatus('Computing fair collector valuation range in INR (₹)...'), 4200);
 
     try {
-      const response = await fetch('/api/gemini/scan-hotwheels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType: 'image/jpeg',
-        }),
-        signal: controller.signal,
-      });
+      let response: Response;
+      try {
+        response = await fetch('/api/gemini/scan-hotwheels', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          body: JSON.stringify({ 
+            imageBase64: img || undefined,
+            mimeType: params.mimeType || 'image/jpeg',
+            fileName: params.fileName || currentFileName || 'car-scan.jpg',
+            modelName: model.trim() || undefined,
+            brand,
+            condition,
+            notes,
+            timestamp: Date.now(),
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr: any) {
+        if (fetchErr.name === 'AbortError') throw fetchErr;
+        // Fallback to /api/scan-car
+        response = await fetch('/api/scan-car', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            imageBase64: img || undefined,
+            mimeType: params.mimeType || 'image/jpeg',
+            modelName: model.trim() || undefined,
+            brand,
+            condition,
+            notes,
+            timestamp: Date.now(),
+          }),
+          signal: controller.signal,
+        });
+      }
 
       clearTimeout(timeoutId);
 
-      // Read raw response text for diagnostic transparency
-      let data: any = null;
-      let rawText = '';
-      try {
-        rawText = await response.text();
-        data = JSON.parse(rawText);
-      } catch (jsonErr) {
-        console.error('[ValueScanner Non-JSON Raw API Response]:', {
-          httpStatus: response.status,
-          statusText: response.statusText,
-          rawSnippet: rawText.slice(0, 300),
-          jsonErr,
-        });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Valuation service encountered an issue. Please try again.');
       }
 
-      console.log('[ValueScanner Gemini API Response]:', {
-        httpStatus: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        parsedPayload: data,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Handle non-200 or failure payloads
-      if (!response.ok || !data?.success) {
-        let resolvedErrorType: ScannerErrorType = 'general';
-        let resolvedErrorMessage = '';
-
-        if (response.status === 504 || data?.errorType === 'network_timeout') {
-          resolvedErrorType = 'network_timeout';
-          resolvedErrorMessage = 'The scan request timed out while communicating with the valuation server. Please tap "Retry Scan Now".';
-        } else if (response.status === 429 || data?.errorType === 'quota_exceeded') {
-          resolvedErrorType = 'quota_exceeded';
-          resolvedErrorMessage = 'Gemini API quota limit reached. Please wait a moment and tap "Retry Scan Now".';
-        } else if (response.status === 503 || response.status === 502 || data?.errorType === 'service_busy') {
-          resolvedErrorType = 'service_busy';
-          resolvedErrorMessage = 'Gemini AI vision services are currently experiencing high traffic. Please retry in a few moments.';
-        } else if (response.status === 400 || data?.errorType === 'invalid_input') {
-          resolvedErrorType = 'invalid_input';
-          resolvedErrorMessage = data?.error || 'Uploaded photo could not be processed. Please try another clear photo.';
-        } else if (response.status === 500 || data?.errorType === 'internal_api_error') {
-          resolvedErrorType = 'internal_api_error';
-          resolvedErrorMessage = data?.error || 'Internal AI engine error occurred while appraising this car.';
-        } else {
-          resolvedErrorType = data?.errorType || 'general';
-          resolvedErrorMessage = data?.error || `API returned status ${response.status} (${response.statusText || 'Error'}).`;
-        }
-
-        console.error('[ValueScanner Scan Error]:', {
-          httpStatus: response.status,
-          errorType: resolvedErrorType,
-          errorMessage: resolvedErrorMessage,
-          rawError: data?.rawError || rawText,
-        });
-
-        setErrorType(resolvedErrorType);
-        setRawDiagnosticError(
-          data?.rawError
-            ? `[HTTP ${response.status}] ${data.rawError}`
-            : `HTTP ${response.status} ${response.statusText}: ${rawText.slice(0, 180)}`
-        );
-        throw new Error(resolvedErrorMessage);
-      }
-
-      // Success payload
-      console.log('[ValueScanner Photo Appraisal Completed]:', {
-        modelUsed: data.modelUsed,
-        carIdentified: data.data?.carModelName,
-        category: data.data?.categoryType,
-        estimatedINR: `₹${data.data?.estimatedValueMinINR} - ₹${data.data?.estimatedValueMaxINR}`,
-        elapsedMs: data.elapsedMs,
-      });
-
-      setScanResult(data.data);
+      const result: ScanResultData = data.data;
+      setScanResult(result);
+      saveToHistory(result, img);
     } catch (err: any) {
-      console.error('[ValueScanner Scan Exception]:', {
-        errorName: err.name,
-        message: err.message,
-        isAbort: err.name === 'AbortError',
-      });
-
-      let msg = err.message || 'Failed to scan image. Please try again with a brighter, well-lit photo.';
+      console.error('[ValueScanner] Scan error:', err);
+      let msg = err.message || 'Failed to value car. Please try again with clear details or a photo.';
       let type: ScannerErrorType = 'general';
 
-      if (err.name === 'AbortError' || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout')) {
+      if (err.name === 'AbortError' || msg.toLowerCase().includes('timeout')) {
         type = 'network_timeout';
-        msg = 'Scan request timed out. Please tap "Retry Scan Now".';
-      } else if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('429') || msg.toLowerCase().includes('capacity')) {
-        type = 'quota_exceeded';
-      } else if (msg.toLowerCase().includes('busy') || msg.toLowerCase().includes('503') || msg.toLowerCase().includes('traffic')) {
-        type = 'service_busy';
-      } else if (msg.toLowerCase().includes('internal') || msg.toLowerCase().includes('500')) {
-        type = 'internal_api_error';
+        msg = 'Scan request timed out. Please tap "Retry Scan".';
       }
-
       setErrorType(type);
       setErrorMessage(msg);
     } finally {
@@ -326,444 +333,528 @@ export const ValueScanner: React.FC = () => {
     }
   };
 
-  const handleRetryCurrentPhoto = () => {
-    if (selectedImage) {
-      triggerScan(selectedImage);
-    }
+  const handleApplyPreset = (preset: typeof SAMPLE_PRESETS[0]) => {
+    setModelNameInput(preset.name);
+    setSelectedBrand(preset.brand);
+    setSelectedCondition(preset.condition);
+    setNotesInput(preset.desc);
+    setActiveTab('manual');
+    triggerScan({
+      modelName: preset.name,
+      brand: preset.brand,
+      condition: preset.condition,
+      notes: preset.desc,
+      imageBase64: null,
+    });
   };
 
   const generateWhatsAppSellUrl = () => {
     if (!scanResult) return '#';
     const text = encodeURIComponent(
-      `Hello Redline Garage! 🚗💨\nI scanned a Hot Wheels car with your AI Value Scanner and would like to inquire about selling / consigning it:\n\n` +
-      `• *Car Model:* ${scanResult.carModelName}\n` +
-      `• *Series / Year:* ${scanResult.seriesAndYear}\n` +
-      `• *Type:* ${scanResult.categoryType}\n` +
-      `• *Estimated Value:* ₹${scanResult.estimatedValueMinINR} - ₹${scanResult.estimatedValueMaxINR}\n` +
-      `• *Condition Notes:* ${scanResult.conditionAssessment}\n\n` +
-      `Could you let me know if Redline Garage is interested in purchasing this casting?`
+      `Hello Redline Garage Concierge! I appraised a die-cast model on your AI Value Scanner:\n\n` +
+      `🚗 Model: ${scanResult.carModelName}\n` +
+      `🏷️ Brand: ${scanResult.brand || selectedBrand}\n` +
+      `📅 Series/Year: ${scanResult.seriesAndYear}\n` +
+      `📦 Condition: ${scanResult.conditionAssessment || selectedCondition}\n` +
+      `💰 AI Valuation: ₹${scanResult.estimatedValueMinINR.toLocaleString('en-IN')} - ₹${scanResult.estimatedValueMaxINR.toLocaleString('en-IN')}\n\n` +
+      `I am interested in selling / consigning this piece to Redline Garage. How do we proceed?`
     );
     return `https://wa.me/8431294886?text=${text}`;
   };
 
   const handleReset = () => {
     setSelectedImage(null);
+    setCurrentFileName(null);
     setScanResult(null);
     setErrorMessage(null);
     setErrorType(null);
-    setRawDiagnosticError(null);
-    setShowDiagnosticTrace(false);
+    setModelNameInput('');
+    setNotesInput('');
     setIsScanning(false);
-    setIsDragging(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
   return (
-    <section id="scanner" className="py-20 bg-zinc-950 text-white relative overflow-hidden border-t border-b border-red-900/30">
-      {/* Ambient background glows */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="min-h-screen bg-zinc-950 text-white relative py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-dark-grid">
+      {/* Background Neon Aura */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-gradient-to-b from-sky-600/10 via-red-600/5 to-transparent blur-3xl pointer-events-none" />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Title Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-600/20 border border-red-500/30 text-red-400 font-mono text-xs font-bold uppercase tracking-widest">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>AI Die-Cast Valuation Engine</span>
+      <div className="max-w-4xl mx-auto relative z-10 space-y-8">
+        
+        {/* Top Header & Breadcrumbs */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-850 pb-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onNavigate ? onNavigate('home') : window.history.back()}
+                className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Store</span>
+              </button>
+              <span className="text-zinc-600 font-mono">/</span>
+              <span className="text-xs font-mono font-bold text-sky-400 uppercase tracking-widest flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>AI Value Scanner</span>
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white font-sans uppercase">
+              AI Die-Cast <span className="text-sky-400">Value Scanner</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-zinc-400 max-w-xl font-sans">
+              Instant Indian secondary market valuation &amp; rarity analysis powered by Gemini AI. Scan your Hot Wheels, Mini GT, Majorette, and CCA models.
+            </p>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tight font-sans text-white">
-            Scan Your <span className="text-red-500">Hot Wheels</span> Car
-          </h2>
-          <p className="text-sm sm:text-base text-zinc-400 font-light leading-relaxed">
-            Upload or take a photo of your carded blister pack or loose die-cast car. Our Gemini AI engine will inspect the casting, series, tampo details, and estimate fair market collector value in Indian Rupees (₹).
-          </p>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-950/60 border border-sky-500/30 text-sky-400 font-mono text-[10px] font-bold uppercase tracking-wider shadow-sm">
+              <Zap className="w-3 h-3 text-sky-400 animate-pulse" />
+              <span>Gemini 3.7 Vision Engine</span>
+            </span>
+          </div>
         </div>
 
-        {/* Scanner Body Card */}
-        <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-sm">
-          {!selectedImage ? (
-            /* Upload Screen (Enforces Real Photo Upload) */
-            <div className="space-y-6 max-w-2xl mx-auto">
-              {/* Hidden File & Camera Inputs */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-
-              {/* Top Primary Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="bg-red-600 hover:bg-red-500 text-white font-mono text-sm font-bold uppercase px-6 py-4 rounded-2xl shadow-xl shadow-red-600/25 transition-all flex items-center justify-center gap-3 cursor-pointer min-h-[56px] group hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  <Camera className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                  <span>Take Live Photo</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-sm font-bold uppercase px-6 py-4 rounded-2xl border border-zinc-700 hover:border-zinc-500 transition-all flex items-center justify-center gap-3 cursor-pointer min-h-[56px] group hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  <Upload className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
-                  <span>Choose from Gallery</span>
-                </button>
-              </div>
-
-              {/* Drag & Drop Target Zone */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file) handleImageUpload(file);
-                }}
-                className={`border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center transition-all cursor-pointer group flex flex-col items-center justify-center gap-3.5 ${
-                  isDragging
-                    ? 'border-red-500 bg-red-950/30 scale-[1.01]'
-                    : 'border-zinc-700 hover:border-red-500/80 bg-zinc-950/70 hover:bg-zinc-950/90'
+        {/* Scanner HUD Card */}
+        <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-sm">
+          
+          {/* Mode Switcher Tabs */}
+          {!scanResult && (
+            <div className="grid grid-cols-2 border-b border-zinc-800 bg-zinc-950/60 p-1.5 gap-1.5 font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab('photo')}
+                className={`py-3 px-4 rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'photo'
+                    ? 'bg-sky-500 text-zinc-950 shadow-md shadow-sky-500/20'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
-                  isDragging
-                    ? 'bg-red-600 text-white scale-110'
-                    : 'bg-zinc-800/80 border border-zinc-700 text-zinc-400 group-hover:text-red-400 group-hover:border-red-500/40'
-                }`}>
-                  <ImageIcon className="w-7 h-7" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-base font-bold text-white font-sans uppercase tracking-tight">
-                    {isDragging ? 'Drop Your Photo Here to Scan' : 'Or Drag & Drop Die-Cast Photo Here'}
-                  </div>
-                  <p className="text-xs text-zinc-400 font-mono">
-                    Supports JPG, PNG, WEBP • Works on sealed blister cards or loose cars
-                  </p>
-                </div>
-              </div>
-
-              {/* Scanning Best Practices Tip Box */}
-              <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-2">
-                <div className="text-xs font-mono text-zinc-300 font-bold uppercase tracking-wider flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-red-400" />
-                  <span>How to get the most accurate appraisal:</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-[11px] font-mono text-zinc-400">
-                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
-                    <span className="text-zinc-200 font-semibold block mb-0.5">1. Bright Lighting</span>
-                    Ensure good lighting on the blister card or car paint finish.
-                  </div>
-                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
-                    <span className="text-zinc-200 font-semibold block mb-0.5">2. Visible Tampos & Card</span>
-                    Keep car logos, collector numbers, or card art in clear view.
-                  </div>
-                  <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5">
-                    <span className="text-zinc-200 font-semibold block mb-0.5">3. Avoid Heavy Glare</span>
-                    Angle your camera slightly to minimize plastic blister reflections.
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Scanning & Result Screen */
-            <div className="space-y-8">
-              {isScanning ? (
-                /* Scanning Loading State with Live Status */
-                <div className="flex flex-col items-center justify-center py-16 space-y-6 text-center">
-                  <div className="relative w-48 h-48 rounded-2xl overflow-hidden border-2 border-red-500 shadow-2xl bg-zinc-950">
-                    <img
-                      src={selectedImage}
-                      alt="Scanning Target"
-                      className="w-full h-full object-cover filter brightness-75"
-                    />
-                    {/* Animated Laser Scanner Bar */}
-                    <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_15px_#ef4444] animate-bounce"></div>
-                    <div className="absolute inset-0 bg-red-600/10 pointer-events-none"></div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-center gap-2 text-red-500 font-mono text-sm font-bold uppercase tracking-wider">
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>{scanningStatus}</span>
-                    </div>
-                    <p className="text-xs text-zinc-400 font-mono max-w-sm">
-                      Examining casting silhouette, packaging card tampos, wheel variations, and collector market pricing.
-                    </p>
-                  </div>
-                </div>
-              ) : errorMessage ? (
-                /* Error Recovery State */
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-center space-y-4 max-w-lg mx-auto shadow-xl">
-                  <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center ${
-                    errorType === 'network_timeout'
-                      ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-                      : errorType === 'quota_exceeded'
-                      ? 'bg-orange-500/10 border border-orange-500/30 text-orange-400'
-                      : errorType === 'service_busy'
-                      ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-                      : errorType === 'internal_api_error'
-                      ? 'bg-red-500/10 border border-red-500/30 text-red-400'
-                      : 'bg-red-500/10 border border-red-500/30 text-red-400'
-                  }`}>
-                    {errorType === 'network_timeout' ? (
-                      <WifiOff className="w-7 h-7" />
-                    ) : errorType === 'quota_exceeded' ? (
-                      <AlertTriangle className="w-7 h-7" />
-                    ) : errorType === 'service_busy' ? (
-                      <Clock className="w-7 h-7" />
-                    ) : errorType === 'internal_api_error' ? (
-                      <Server className="w-7 h-7" />
-                    ) : (
-                      <AlertCircle className="w-7 h-7" />
-                    )}
-                  </div>
-                  
-                  <div className="space-y-1.5">
-                    <h3 className="text-lg font-bold text-white uppercase font-sans tracking-tight">
-                      {errorType === 'network_timeout'
-                        ? 'Network Request Timed Out'
-                        : errorType === 'quota_exceeded'
-                        ? 'Gemini API Quota Limit Reached'
-                        : errorType === 'service_busy'
-                        ? 'AI Vision Servers In High Demand'
-                        : errorType === 'internal_api_error'
-                        ? 'Internal AI Engine Error'
-                        : errorType === 'invalid_input'
-                        ? 'Invalid Image Format'
-                        : errorType === 'unrecognized_car'
-                        ? 'Hot Wheels Model Unclear'
-                        : 'Scan Inconclusive'}
-                    </h3>
-                    <p className="text-xs text-zinc-300 font-mono leading-relaxed">
-                      {errorMessage}
-                    </p>
-                  </div>
-
-                  {/* Technical Diagnostic Trace Inspector */}
-                  {rawDiagnosticError && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowDiagnosticTrace(!showDiagnosticTrace)}
-                        className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 underline transition cursor-pointer"
-                      >
-                        {showDiagnosticTrace ? 'Hide Technical Diagnostic Trace' : 'View Technical Diagnostic Trace'}
-                      </button>
-                      {showDiagnosticTrace && (
-                        <div className="mt-2 bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-left font-mono text-[10px] text-zinc-400 max-h-32 overflow-y-auto space-y-1.5 break-words">
-                          <div className="text-red-400 font-bold uppercase flex items-center justify-between">
-                            <span>Diagnostic Trace Log:</span>
-                            <span className="text-[9px] text-zinc-500">{errorType?.toUpperCase()}</span>
-                          </div>
-                          <div className="text-zinc-300">{rawDiagnosticError}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {errorType === 'quota_exceeded' && (
-                    <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-3 text-left text-xs font-mono text-amber-300/90 space-y-1">
-                      <div className="font-bold text-[11px] uppercase flex items-center gap-1">
-                        <Cpu className="w-3.5 h-3.5" />
-                        <span>Shared Gemini API Notice:</span>
-                      </div>
-                      <div className="text-[11px] text-amber-200/80">
-                        Please pause for a few seconds before retrying the appraisal scan.
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    {(errorType === 'service_busy' || errorType === 'quota_exceeded' || errorType === 'network_timeout' || errorType === 'internal_api_error') && (
-                      <button
-                        onClick={handleRetryCurrentPhoto}
-                        className="bg-amber-600 hover:bg-amber-500 text-black font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] flex items-center gap-2 shadow-lg shadow-amber-600/20"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        <span>Retry Scan Now</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={handleReset}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold uppercase px-5 py-3 rounded-xl transition cursor-pointer min-h-[44px] border border-zinc-700"
-                    >
-                      Choose Another Photo
-                    </button>
-                  </div>
-                </div>
-              ) : scanResult && !scanResult.isHotWheelsOrDiecast ? (
-                /* Unrecognized / Non-Diecast Guidance Screen */
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-center space-y-5 max-w-lg mx-auto shadow-xl animate-fade-in">
-                  <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center bg-amber-500/10 border border-amber-500/30 text-amber-400">
-                    <HelpCircle className="w-7 h-7" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white uppercase font-sans tracking-tight">
-                      Die-Cast Vehicle Not Detected
-                    </h3>
-                    <p className="text-xs text-zinc-300 font-mono leading-relaxed">
-                      {scanResult.valueExplanation || 'Our AI vision model could not clearly identify a Hot Wheels or die-cast car in this image.'}
-                    </p>
-                  </div>
-
-                  {/* Photo tips box */}
-                  <div className="bg-zinc-950/90 border border-zinc-800 rounded-xl p-4 text-left text-xs font-mono text-zinc-400 space-y-2">
-                    <div className="text-zinc-200 font-bold text-xs uppercase flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-red-400" />
-                      <span>Tips for an accurate appraisal:</span>
-                    </div>
-                    <ul className="space-y-1 pl-1 text-[11px] text-zinc-400">
-                      <li>• Take a bright, well-lit photo of your Hot Wheels blister card or loose car.</li>
-                      <li>• Keep the car or packaging centered and in sharp focus.</li>
-                      <li>• Avoid heavy flash glare or reflective plastic reflections over the tampos.</li>
-                    </ul>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    <button
-                      onClick={handleReset}
-                      className="bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase px-6 py-3 rounded-xl transition cursor-pointer min-h-[44px] shadow-lg shadow-red-600/20"
-                    >
-                      Take / Upload New Photo
-                    </button>
-                  </div>
-                </div>
-              ) : scanResult ? (
-                /* Successful Results Card */
-                <div className="space-y-6 animate-fade-in">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    {/* Left: Scanned Photo Preview */}
-                    <div className="lg:col-span-5 space-y-4">
-                      <div className="aspect-4/3 rounded-2xl overflow-hidden border-2 border-zinc-700 bg-zinc-950 relative shadow-xl">
-                        <img
-                          src={selectedImage}
-                          alt="Scanned Car"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-3 left-3 bg-red-600 text-white font-mono text-[10px] font-bold uppercase px-2.5 py-1 rounded-md shadow-md">
-                          {scanResult.categoryType}
-                        </div>
-                        <div className="absolute bottom-3 right-3 bg-black/80 backdrop-blur-xs text-zinc-300 font-mono text-[10px] px-2 py-0.5 rounded border border-white/20">
-                          Confidence: {scanResult.confidenceLevel}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleReset}
-                        className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold uppercase py-2.5 rounded-xl transition border border-zinc-700 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Scan Another Car Photo</span>
-                      </button>
-                    </div>
-
-                    {/* Right: Detailed Appraisal Breakdown */}
-                    <div className="lg:col-span-7 space-y-5">
-                      {/* Car Identification */}
-                      <div className="space-y-1 pb-4 border-b border-zinc-800">
-                        <span className="text-xs font-mono text-red-400 font-bold uppercase tracking-wider">
-                          {scanResult.seriesAndYear}
-                        </span>
-                        <h3 className="text-2xl sm:text-3xl font-black text-white uppercase italic tracking-tight font-sans">
-                          {scanResult.carModelName}
-                        </h3>
-                      </div>
-
-                      {/* Valuation Box */}
-                      <div className="bg-gradient-to-r from-red-950/60 to-zinc-900 border border-red-500/40 rounded-2xl p-5 shadow-lg space-y-3">
-                        <div className="flex items-center justify-between text-xs font-mono text-zinc-400 uppercase">
-                          <span>Estimated Secondary Market Value:</span>
-                          <span className="text-red-400 font-bold">INR (₹)</span>
-                        </div>
-                        <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
-                          <span className="text-red-500">₹{scanResult.estimatedValueMinINR.toLocaleString('en-IN')}</span>
-                          <span className="text-zinc-500 text-2xl font-light">–</span>
-                          <span className="text-white">₹{scanResult.estimatedValueMaxINR.toLocaleString('en-IN')}</span>
-                        </div>
-
-                        {/* AI Valuation Disclaimer */}
-                        <div className="pt-2 border-t border-red-900/40">
-                          <div className="flex items-start gap-1.5 text-[11px] text-zinc-400 font-mono">
-                            <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-                            <span>Estimate generated by AI based on collector market trends. Actual resale value may vary based on buyer and condition.</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Observations & Condition */}
-                      <div className="space-y-3">
-                        <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-                          <div className="text-xs font-mono text-zinc-400 uppercase font-bold flex items-center gap-1.5">
-                            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                            <span>Condition Assessment</span>
-                          </div>
-                          <p className="text-xs text-zinc-300 leading-relaxed font-light">
-                            {scanResult.conditionAssessment}
-                          </p>
-                        </div>
-
-                        <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-                          <div className="text-xs font-mono text-zinc-400 uppercase font-bold flex items-center gap-1.5">
-                            <Tag className="w-4 h-4 text-blue-400" />
-                            <span>Collector Valuation Rationale</span>
-                          </div>
-                          <p className="text-xs text-zinc-300 leading-relaxed font-light">
-                            {scanResult.valueExplanation}
-                          </p>
-                        </div>
-
-                        {scanResult.collectorTip && (
-                          <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-4 space-y-1.5">
-                            <div className="text-xs font-mono text-amber-400 uppercase font-bold flex items-center gap-1.5">
-                              <Flame className="w-4 h-4 text-amber-400" />
-                              <span>Pro Collector Fact</span>
-                            </div>
-                            <p className="text-xs text-amber-200 leading-relaxed font-light">
-                              {scanResult.collectorTip}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Sell to Redline WhatsApp CTA */}
-                      <div className="pt-3">
-                        <a
-                          href={generateWhatsAppSellUrl()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer active:scale-95 min-h-[44px]"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          <span>Sell this to Redline Garage (WhatsApp Inquire)</span>
-                          <ArrowRight className="w-4 h-4 ml-1" />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+                <Camera className="w-4 h-4" />
+                <span>Photo / Camera Scan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('manual')}
+                className={`py-3 px-4 rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'manual'
+                    ? 'bg-sky-500 text-zinc-950 shadow-md shadow-sky-500/20'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                }`}
+              >
+                <Search className="w-4 h-4" />
+                <span>Search by Model Name</span>
+              </button>
             </div>
           )}
+
+          <div className="p-6 sm:p-8">
+            
+            {/* VIEW 1: Input / Form Controls */}
+            {!scanResult && (
+              <div className="space-y-6">
+                
+                {/* Mode A: Photo Upload / Live Camera */}
+                {activeTab === 'photo' && !selectedImage && (
+                  <div className="space-y-5">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+
+                    {/* Dual Action Buttons */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="btn-press bg-sky-500 hover:bg-sky-400 text-zinc-950 font-mono text-xs font-bold uppercase tracking-wider px-6 py-4 rounded-xl flex items-center justify-center gap-2.5 cursor-pointer shadow-lg shadow-sky-500/10"
+                      >
+                        <Camera className="w-4 h-4 text-zinc-950" />
+                        <span>Take Live Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="btn-press bg-zinc-800 hover:bg-zinc-750 text-white font-mono text-xs font-bold uppercase tracking-wider px-6 py-4 rounded-xl border border-zinc-700 flex items-center justify-center gap-2.5 cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 text-sky-400" />
+                        <span>Upload From Device</span>
+                      </button>
+                    </div>
+
+                    {/* Drag & Drop Area */}
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleImageUpload(file);
+                      }}
+                      className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
+                        isDragging
+                          ? 'border-sky-500 bg-sky-950/30 shadow-inner'
+                          : 'border-zinc-700 hover:border-sky-500/60 bg-zinc-950/60'
+                      }`}
+                    >
+                      <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-sky-400 shadow-md">
+                        <ImageIcon className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="font-mono text-xs font-bold uppercase tracking-wider text-zinc-200">
+                          Drop blister card or loose die-cast photo here
+                        </div>
+                        <div className="text-[11px] text-zinc-400 font-sans">
+                          Clear front-view of casting, card series, or chassis markings (JPG, PNG, WEBP)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode B: Manual Description / Text Search */}
+                {activeTab === 'manual' && (
+                  <div className="space-y-5">
+                    {/* Model Name Input */}
+                    <div className="space-y-1.5 text-left">
+                      <label className="block text-xs font-mono font-bold uppercase text-zinc-300 tracking-wider">
+                        Die-Cast Model &amp; Casting Name <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={modelNameInput}
+                          onChange={(e) => setModelNameInput(e.target.value)}
+                          placeholder="e.g. 1971 Datsun 510 Wagon Super Treasure Hunt ($TH) or Nissan GT-R R34..."
+                          className="w-full bg-zinc-950 border border-zinc-700 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl px-4 py-3.5 text-sm font-sans text-white placeholder-zinc-500 outline-hidden transition-colors"
+                        />
+                        {modelNameInput && (
+                          <button
+                            type="button"
+                            onClick={() => setModelNameInput('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Brand & Condition Matrix */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                      {/* Brand Selector */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-mono font-bold uppercase text-zinc-300 tracking-wider">
+                          Brand / Manufacturer
+                        </label>
+                        <select
+                          value={selectedBrand}
+                          onChange={(e) => setSelectedBrand(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-700 focus:border-sky-500 rounded-xl px-3.5 py-3 text-xs font-mono text-white outline-hidden cursor-pointer"
+                        >
+                          <option value="Hot Wheels">Hot Wheels (Mattel)</option>
+                          <option value="Mini GT">Mini GT (TSM-Model)</option>
+                          <option value="Majorette">Majorette (European)</option>
+                          <option value="CCA">CCA / Custom Casting</option>
+                          <option value="Inno64 / Pop Race">Inno64 / Pop Race / Kaido House</option>
+                          <option value="Matchbox">Matchbox</option>
+                          <option value="Other 1:64">Other 1:64 Scale Model</option>
+                        </select>
+                      </div>
+
+                      {/* Condition Selector */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-mono font-bold uppercase text-zinc-300 tracking-wider">
+                          Model Condition
+                        </label>
+                        <select
+                          value={selectedCondition}
+                          onChange={(e) => setSelectedCondition(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-700 focus:border-sky-500 rounded-xl px-3.5 py-3 text-xs font-mono text-white outline-hidden cursor-pointer"
+                        >
+                          <option value="Mint on Card (Carded)">Mint on Card (MOC / Carded Blister)</option>
+                          <option value="Sealed Box / Acrylic Case">Sealed Box / Acrylic Case (Mint Boxed)</option>
+                          <option value="Loose — Near Mint">Loose — Near Mint (Clean axles, no paint chips)</option>
+                          <option value="Loose — Minor Playwear">Loose — Minor Wear (Slight rub/tampos wear)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Additional Notes */}
+                    <div className="space-y-1.5 text-left">
+                      <label className="block text-xs font-mono font-bold uppercase text-zinc-400 tracking-wider">
+                        Specific Details / Variations (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={notesInput}
+                        onChange={(e) => setNotesInput(e.target.value)}
+                        placeholder="e.g. Spectraflame paint, Real Riders rubber wheels, Short card, Special chase number..."
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-sky-500 rounded-xl px-4 py-2.5 text-xs font-sans text-white placeholder-zinc-600 outline-hidden"
+                      />
+                    </div>
+
+                    {/* Submit Valuation Button */}
+                    <button
+                      type="button"
+                      disabled={isScanning || !modelNameInput.trim()}
+                      onClick={() => triggerScan({ modelName: modelNameInput, brand: selectedBrand, condition: selectedCondition, notes: notesInput })}
+                      className="w-full btn-press bg-sky-500 hover:bg-sky-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-mono text-xs font-bold uppercase tracking-wider py-4 px-6 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-500/20"
+                    >
+                      <Sparkles className="w-4 h-4 text-zinc-950" />
+                      <span>Estimate Valuation &amp; Rarity</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Common / Sample Presets */}
+                <div className="pt-4 border-t border-zinc-800 text-left space-y-2.5">
+                  <div className="text-[11px] font-mono uppercase text-zinc-400 tracking-widest flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5 text-red-500" />
+                    <span>Quick Valuation Demos:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {SAMPLE_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleApplyPreset(preset)}
+                        className="text-left bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-sky-500/40 px-3 py-1.5 rounded-lg text-xs font-mono text-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span className="text-sky-400 font-bold">[{preset.brand}]</span>
+                        <span className="truncate max-w-[180px] sm:max-w-xs">{preset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* VIEW 2: Scanning Loading State / HUD */}
+            {isScanning && (
+              <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center">
+                <div className="relative w-20 h-20">
+                  <div className="absolute inset-0 rounded-full border-2 border-sky-500/20 animate-ping" />
+                  <div className="absolute inset-0 rounded-full border-2 border-sky-500/30 border-t-sky-400 border-r-red-500 animate-spin" />
+                  <div className="absolute inset-3 rounded-full bg-zinc-950 flex items-center justify-center text-sky-400">
+                    <Crosshair className="w-6 h-6 animate-pulse" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="font-mono text-sm font-bold text-white tracking-widest uppercase flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                    <span>{scanningStatus}</span>
+                  </div>
+                  <div className="text-xs text-zinc-400 font-sans">
+                    Consulting Indian collector sales databases, Hot Wheels wikis &amp; verified die-cast transaction records...
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 3: Scan Results & Detailed Breakdown */}
+            {scanResult && !isScanning && (
+              <div className="space-y-6 animate-fade-in text-left">
+                
+                {/* Result Hero Header with Large Valuation */}
+                <div className="p-6 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-sky-500/30 rounded-2xl relative overflow-hidden shadow-xl">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-sky-400 bg-sky-950/80 border border-sky-500/30 px-2.5 py-0.5 rounded">
+                          {scanResult.categoryType || 'Collector 1:64 Model'}
+                        </span>
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          {scanResult.brand || selectedBrand}
+                        </span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white font-sans">
+                        {scanResult.carModelName}
+                      </h2>
+                      <div className="text-xs font-mono text-zinc-400">
+                        {scanResult.seriesAndYear}
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right bg-zinc-900/80 sm:bg-transparent p-4 sm:p-0 rounded-xl border sm:border-0 border-zinc-800">
+                      <div className="text-[10px] font-mono font-bold uppercase text-zinc-400 tracking-wider">
+                        Estimated Indian Secondary Value
+                      </div>
+                      <div className="text-3xl sm:text-4xl font-mono font-black text-emerald-400 tracking-tight">
+                        ₹{scanResult.estimatedValueMinINR.toLocaleString('en-IN')} – ₹{scanResult.estimatedValueMaxINR.toLocaleString('en-IN')}
+                      </div>
+                      <div className="flex items-center sm:justify-end gap-1.5 text-[10px] font-mono text-zinc-400 pt-1">
+                        <TrendingUp className="w-3 h-3 text-sky-400" />
+                        <span>Confidence: <strong className="text-sky-400 font-bold">{scanResult.confidenceLevel}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reasoning Badges / Highlights */}
+                {scanResult.reasoningTags && scanResult.reasoningTags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold tracking-wider">Valuation Drivers:</span>
+                    {scanResult.reasoningTags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-950 border border-zinc-800 text-xs font-mono font-semibold text-zinc-300"
+                      >
+                        <Tag className="w-3 h-3 text-sky-400" />
+                        <span>{tag}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Visual Viewfinder if photo was uploaded */}
+                {selectedImage && (
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-zinc-950 border border-zinc-800 p-3 rounded-xl">
+                    <div className="sm:col-span-4 aspect-4/3 rounded-lg overflow-hidden bg-black flex items-center justify-center relative border border-zinc-800">
+                      <img src={selectedImage} alt="Analyzed Die-Cast" className="w-full h-full object-contain" />
+                      <div className="absolute bottom-1 right-1 font-mono text-[8px] bg-zinc-950/80 text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20">
+                        DIAGNOSTIC PASSED
+                      </div>
+                    </div>
+                    <div className="sm:col-span-8 space-y-1.5 font-mono text-xs">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold">Assessed Condition</div>
+                      <div className="text-zinc-200 font-sans leading-relaxed">{scanResult.conditionAssessment}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Collector Analysis & Explanation */}
+                <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-sky-400 uppercase tracking-wider">
+                    <Info className="w-3.5 h-3.5" />
+                    <span>Appraisal Breakdown &amp; Market Context</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-zinc-300 font-sans leading-relaxed">
+                    {scanResult.valueExplanation}
+                  </p>
+                  {scanResult.collectorTip && (
+                    <div className="mt-3 pt-3 border-t border-zinc-850 flex items-start gap-2 text-xs text-amber-300 font-sans bg-amber-950/20 p-2.5 rounded-lg border border-amber-900/30">
+                      <Award className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-bold font-mono uppercase text-[10px] text-amber-400 block">Collector Tip:</strong>
+                        <span>{scanResult.collectorTip}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Action Buttons */}
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <a
+                    href={generateWhatsAppSellUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 btn-press bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase tracking-wider py-4 px-5 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Sell / Consign on WhatsApp</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+
+                  <button
+                    onClick={handleReset}
+                    className="btn-press bg-zinc-800 hover:bg-zinc-750 text-zinc-200 font-mono text-xs font-bold uppercase tracking-wider py-4 px-6 rounded-xl flex items-center justify-center gap-2 cursor-pointer border border-zinc-700"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Scan Another Model</span>
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* Error Display */}
+            {errorMessage && !isScanning && (
+              <div className="p-5 bg-red-950/30 border border-red-900/50 rounded-xl space-y-3 text-left">
+                <div className="flex items-center gap-2 text-red-400 font-mono text-xs font-bold uppercase">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Scan Issue Encountered</span>
+                </div>
+                <p className="text-xs text-zinc-300 font-sans leading-relaxed">{errorMessage}</p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => triggerScan({})}
+                    className="btn-press bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold px-4 py-2 rounded-lg cursor-pointer"
+                  >
+                    Retry Valuation
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="btn-press bg-zinc-800 text-zinc-300 font-mono text-xs font-bold px-4 py-2 rounded-lg cursor-pointer"
+                  >
+                    Clear &amp; Try New Model
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
+
+        {/* Previous Scans / Valuation History */}
+        {scanHistory.length > 0 && (
+          <div className="border border-zinc-850 bg-zinc-900/50 rounded-2xl p-6 text-left space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider">
+                <History className="w-4 h-4 text-sky-400" />
+                <span>Recent Appraisals in this Session</span>
+              </div>
+              <button
+                onClick={() => {
+                  setScanHistory([]);
+                  localStorage.removeItem('redline_scanner_history');
+                }}
+                className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 uppercase cursor-pointer"
+              >
+                Clear History
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {scanHistory.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setScanResult(item.result)}
+                  className="p-3 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-sky-500/40 rounded-xl transition-all cursor-pointer space-y-1 group"
+                >
+                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                    <span className="text-sky-400 font-bold uppercase">{item.result.brand || 'Diecast'}</span>
+                    <span className="text-emerald-400 font-bold">₹{item.result.estimatedValueMinINR} - ₹{item.result.estimatedValueMaxINR}</span>
+                  </div>
+                  <div className="text-xs font-bold text-white truncate group-hover:text-sky-300 transition-colors">
+                    {item.result.carModelName}
+                  </div>
+                  <div className="text-[10px] font-mono text-zinc-500 truncate">
+                    {item.result.seriesAndYear}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
-    </section>
+    </div>
   );
 };

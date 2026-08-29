@@ -1,17 +1,19 @@
 import React from 'react';
 import {
-  Instagram,
   PhoneCall,
-  Mail,
   MapPin,
   RefreshCw,
   MessageCircle,
+  ShieldCheck,
+  Package,
+  Lock,
+  Instagram
 } from 'lucide-react';
 import { RedlineLogo } from './RedlineLogo';
-import { BRAND_ASSETS, BRAND_NAME, BRAND_TAGLINE, BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
+import { BRAND_NAME, BRAND_TAGLINE, BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface FooterProps {
-  onNavigate: (sectionId: string) => void;
+  onNavigate: (route: string) => void;
   onSelectCategory: (category: string) => void;
   onOpenAdmin?: () => void;
   onOpenMyOrders?: () => void;
@@ -28,186 +30,177 @@ export const Footer: React.FC<FooterProps> = ({
   onForceSync
 }) => {
   return (
-    <footer className="bg-zinc-100 text-zinc-900 border-t border-zinc-200 relative">
-      {/* Checkered Flag Accent Line */}
-      <div className="h-1 bg-gradient-to-r from-red-600 via-red-500 to-zinc-900"></div>
-
+    <footer className="bg-zinc-950 text-white border-t border-zinc-800 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 text-left">
           
           {/* Brand Info */}
-          <div className="lg:col-span-2 space-y-4">
-            <div>
-              <RedlineLogo variant="full" theme="light" />
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mt-1">
-                {BRAND_TAGLINE}
-              </div>
-            </div>
-
-            <p className="text-xs text-zinc-600 font-normal leading-relaxed max-w-sm">
-              Turning authentic Hot Wheels die-cast cars into unforgettable gifts, custom photo blister cards, and wall-mounted shadowbox frames. Built for speed, wrapped with love.
+          <div className="lg:col-span-4 space-y-4">
+            <RedlineLogo variant="full" theme="dark" />
+            <p className="text-xs text-zinc-400 font-sans leading-relaxed max-w-sm">
+              India's premier collector-grade 1:64 die-cast archive and bespoke automotive gifting studio. Hot Wheels, Majorette, Mini GT, CCA, custom photo blister cards, and framed displays.
             </p>
+            <div className="flex items-center gap-3 pt-2 text-[11px] font-mono text-zinc-400">
+              <span className="flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> 100% Genuine
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-zinc-400" /> Mangalore Studio
+              </span>
+            </div>
           </div>
 
-          {/* Navigation Shortcuts */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-mono font-bold uppercase text-red-600 tracking-wider">
-              Quick Navigation
+          {/* Scale Models Directory */}
+          <div className="lg:col-span-2 space-y-3">
+            <h4 className="text-xs font-mono font-bold uppercase text-white tracking-widest">
+              Scale Models
             </h4>
-            <ul className="space-y-2 text-xs font-mono text-zinc-600">
+            <ul className="space-y-2 text-xs font-mono text-zinc-400">
               <li>
-                <button onClick={() => onNavigate('catalog')} className="hover:text-zinc-900 transition-colors cursor-pointer">
-                  Full Catalog
+                <button onClick={() => onNavigate('hotwheels')} className="hover:text-white transition-colors cursor-pointer">
+                  Hot Wheels
                 </button>
               </li>
               <li>
-                <button 
-                  onClick={() => {
-                    if (onOpenMyOrders) onOpenMyOrders();
-                  }} 
-                  className="text-red-600 hover:text-red-700 font-bold transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <span>Track My Order</span>
+                <button onClick={() => onNavigate('majorette')} className="hover:text-white transition-colors cursor-pointer">
+                  Majorette
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('categories')} className="hover:text-zinc-900 transition-colors cursor-pointer">
-                  Product Categories
+                <button onClick={() => onNavigate('minigt')} className="hover:text-white transition-colors cursor-pointer">
+                  Mini GT
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('why-us')} className="hover:text-zinc-900 transition-colors cursor-pointer">
-                  Why Choose Redline
+                <button onClick={() => onNavigate('cca')} className="hover:text-white transition-colors cursor-pointer">
+                  CCA
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('faq')} className="hover:text-zinc-900 transition-colors cursor-pointer">
-                  FAQ & Care Guide
+                <button onClick={() => onNavigate('scalemodels')} className="hover:text-red-500 text-zinc-300 font-bold transition-colors cursor-pointer">
+                  All Scale Models →
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          {/* Custom Creation Directory */}
+          <div className="lg:col-span-2 space-y-3">
+            <h4 className="text-xs font-mono font-bold uppercase text-white tracking-widest">
+              Custom Studio
+            </h4>
+            <ul className="space-y-2 text-xs font-mono text-zinc-400">
+              <li>
+                <button onClick={() => onSelectCategory('frames')} className="hover:text-white transition-colors cursor-pointer">
+                  Frames
+                </button>
+              </li>
+              <li>
+                <button onClick={() => onSelectCategory('bouquets')} className="hover:text-white transition-colors cursor-pointer">
+                  Bouquets
+                </button>
+              </li>
+              <li>
+                <button onClick={() => onSelectCategory('custom-cards')} className="hover:text-white transition-colors cursor-pointer">
+                  Custom Cards
+                </button>
+              </li>
+              <li>
+                <button onClick={() => onNavigate('customcreation')} className="hover:text-red-500 text-zinc-300 font-bold transition-colors cursor-pointer">
+                  All Creations →
                 </button>
               </li>
             </ul>
           </div>
 
           {/* Direct Concierge Contact Links */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-mono font-bold uppercase text-red-600 tracking-wider">
-              Order & Community
+          <div className="lg:col-span-4 space-y-3">
+            <h4 className="text-xs font-mono font-bold uppercase text-white tracking-widest">
+              Collector VIP &amp; Support
             </h4>
             <div className="space-y-2 text-xs font-mono">
               <a
                 href={BRAND_WHATSAPP_GROUP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1.5 rounded-lg transition-colors"
+                className="flex items-center justify-between bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 px-3 py-2.5 rounded-xl transition-colors"
               >
-                <MessageCircle className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-                <span>Join VIP WhatsApp Group</span>
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-emerald-500" />
+                  <span>Join VIP WhatsApp Garage</span>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-bold">JOIN</span>
               </a>
 
               <a
                 href="https://wa.me/8431294886"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-zinc-700 hover:text-emerald-800 transition-colors"
+                className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors py-1"
               >
-                <PhoneCall className="w-4 h-4 text-emerald-600" />
-                <span>WhatsApp (+91 8431294886)</span>
+                <PhoneCall className="w-4 h-4 text-zinc-500" />
+                <span>Concierge Desk (+91 8431294886)</span>
               </a>
 
               <a
                 href="https://www.instagram.com/redline_.garage/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-pink-600 hover:text-pink-700 transition-colors"
+                className="flex items-center gap-2 text-zinc-400 hover:text-pink-400 transition-colors py-1"
               >
-                <Instagram className="w-4 h-4" />
-                <span>Instagram (@redline_.garage)</span>
+                <Instagram className="w-4 h-4 text-zinc-500" />
+                <span>@redline_.garage</span>
               </a>
 
-              <a
-                href="mailto:support@redlinegarage.com"
-                className="flex items-center gap-2 text-zinc-600 hover:text-zinc-900 transition-colors"
-              >
-                <Mail className="w-4 h-4 text-red-600" />
-                <span>support@redlinegarage.com</span>
-              </a>
-
-              <div className="flex items-center gap-2 text-zinc-500 text-[11px] pt-1">
-                <MapPin className="w-4 h-4 text-zinc-400" />
-                <span>Global Express Shipping</span>
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  onClick={() => onNavigate('valuescanner')}
+                  className="text-[11px] text-sky-400 hover:text-sky-300 font-mono flex items-center gap-1 cursor-pointer font-bold"
+                >
+                  <span>⚡ AI Value Scanner</span>
+                </button>
+                <span className="text-zinc-600">•</span>
+                <button
+                  onClick={() => onNavigate('track-order')}
+                  className="text-[11px] text-zinc-300 hover:text-red-400 font-mono cursor-pointer flex items-center gap-1 font-bold"
+                >
+                  <span>📦 Track Your Order</span>
+                </button>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-12 pt-8 border-t border-zinc-200 flex flex-col md:flex-row items-center justify-between text-xs font-mono text-zinc-500 gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-            <div>
-              {onOpenAdmin ? (
-                <button
-                  type="button"
-                  onClick={onOpenAdmin}
-                  className="text-zinc-500 hover:text-zinc-700 transition-colors cursor-default focus:outline-hidden"
-                  aria-label="Copyright"
-                >
-                  ©
-                </button>
-              ) : (
-                <span>©</span>
-              )}{' '}
-              {new Date().getFullYear()} Redline Garage. All rights reserved. Hot Wheels is a registered trademark of Mattel, Inc
-              {onOpenAdmin ? (
-                <button
-                  type="button"
-                  onClick={onOpenAdmin}
-                  className="text-zinc-500 hover:text-zinc-700 transition-colors cursor-default focus:outline-hidden"
-                  aria-label="Admin Access"
-                >
-                  .
-                </button>
-              ) : (
-                <span>.</span>
-              )}
-            </div>
-
-            {/* Subtle Non-Intrusive Live Supabase Data Syncing Indicator */}
-            <div 
-              onClick={onForceSync}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold tracking-wider transition-all duration-300 ${
-                isDataSyncing
-                  ? 'bg-amber-50 text-amber-700 border border-amber-300 shadow-xs scale-102'
-                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100/80 cursor-pointer'
-              }`}
-              title={isDataSyncing ? 'Synchronizing live catalog with Supabase vault...' : 'Live connection active. Click to refresh inventory.'}
-            >
-              {isDataSyncing ? (
-                <>
-                  <RefreshCw className="w-3 h-3 text-amber-600 animate-spin" />
-                  <span className="uppercase">Syncing Vault...</span>
-                </>
-              ) : (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="uppercase">Live Vault Connected</span>
-                </>
-              )}
-            </div>
+        <div className="mt-12 pt-6 border-t border-zinc-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-mono text-zinc-400">
+          <div>
+            © {new Date().getFullYear()} Redline Garage India. All rights reserved.
           </div>
 
-          <div className="flex items-center gap-4 text-[11px]">
-            <span className="hover:text-zinc-800 cursor-pointer">Privacy Policy</span>
-            <span>•</span>
-            <span className="hover:text-zinc-800 cursor-pointer">Terms of Service</span>
-            <span>•</span>
-            <span className="hover:text-zinc-800 cursor-pointer">Return Policy</span>
+          <div className="flex items-center gap-4">
+            {onForceSync && (
+              <button
+                onClick={onForceSync}
+                className="flex items-center gap-1 hover:text-zinc-300 transition-colors cursor-pointer"
+                title="Refresh live catalog"
+              >
+                <RefreshCw className={`w-3 h-3 ${isDataSyncing ? 'animate-spin text-red-500' : ''}`} />
+                <span>Sync Vault</span>
+              </button>
+            )}
+
+            {onOpenAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="flex items-center gap-1 text-zinc-400 hover:text-zinc-300 transition-colors cursor-pointer"
+              >
+                <Lock className="w-3 h-3" />
+                <span>Admin</span>
+              </button>
+            )}
           </div>
         </div>
-
       </div>
     </footer>
   );

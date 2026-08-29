@@ -112,11 +112,12 @@ export const PremiumRareSection: React.FC<PremiumRareSectionProps> = ({
                 className="group relative bg-zinc-900/90 border border-zinc-800 hover:border-red-500/80 rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-300 shadow-2xl hover:shadow-[0_20px_40px_rgba(220,38,38,0.15)] hover:-translate-y-2 cursor-pointer"
               >
                 {/* Visual Image Showcase */}
-                <div className="relative aspect-16/9 overflow-hidden bg-zinc-950 border-b border-zinc-800">
+                <div className="relative aspect-16/9 overflow-hidden bg-zinc-950 border-b border-zinc-800 flex items-center justify-center">
                   <ResponsiveImage
-                    src={product.image}
+                    src={product.image || product.imageUrl}
                     alt={product.name}
-                    aspectRatio="16/9"
+                    aspectRatio="auto"
+                    objectFit="cover"
                     sizes="(max-width: 1024px) 100vw, 400px"
                     className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"
                   />

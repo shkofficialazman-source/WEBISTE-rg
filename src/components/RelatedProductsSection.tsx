@@ -53,9 +53,10 @@ export const RelatedProductsSection: React.FC<RelatedProductsSectionProps> = ({
             >
               <div className="aspect-4/3 bg-white rounded-lg overflow-hidden flex items-center justify-center p-1.5 mb-2 border border-zinc-100 group-hover:scale-105 transition-transform">
                 <ResponsiveImage
-                  src={item.image}
+                  src={item.image || item.imageUrl}
                   alt={item.name}
-                  aspectRatio="4/3"
+                  aspectRatio="auto"
+                  objectFit="contain"
                   sizes="100px"
                   className="w-full h-full object-contain"
                 />

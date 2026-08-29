@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, ShieldCheck, Flame, Gift, Truck, ChevronLeft, ChevronRight, Camera, MessageCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { ArrowRight, Sparkles, ShieldCheck, Truck, ChevronLeft, ChevronRight, Package, Car } from 'lucide-react';
 import { Product } from '../types';
 import { ResponsiveImage } from './ResponsiveImage';
-import { BRAND_WHATSAPP_GROUP_URL } from '../brandAssets';
 
 interface HeroSectionProps {
   heroProduct?: Product | null;
   products?: Product[];
   onSelectProduct: (product: Product) => void;
-  onNavigate: (sectionId: string) => void;
+  onNavigate: (route: string) => void;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
@@ -18,317 +16,169 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onSelectProduct,
   onNavigate,
 }) => {
-  // Pool of products for the featured showroom
   const showroomPool = products.length > 0 ? products : heroProduct ? [heroProduct] : [];
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
 
-  // Auto-rotate 2 products every 2 seconds
   useEffect(() => {
-    if (showroomPool.length <= 2 || isPaused) return;
-
+    if (showroomPool.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 2) % showroomPool.length);
-    }, 2000);
-
+      setCurrentIndex((prev) => (prev + 1) % showroomPool.length);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [showroomPool.length, isPaused]);
+  }, [showroomPool.length]);
 
-  // Compute the 2 products for the current rotation
-  const getVisiblePair = (): Product[] => {
-    if (showroomPool.length === 0) return [];
-    if (showroomPool.length === 1) return [showroomPool[0]];
-    
-    const first = showroomPool[currentIndex % showroomPool.length];
-    const second = showroomPool[(currentIndex + 1) % showroomPool.length];
-    return [first, second];
-  };
-
-  const visibleProducts = getVisiblePair();
-  const totalSlides = Math.ceil(showroomPool.length / 2);
-  const currentSlide = Math.floor(currentIndex / 2);
-
-  const handleNext = () => {
-    if (showroomPool.length > 2) {
-      setCurrentIndex((prev) => (prev + 2) % showroomPool.length);
-    }
-  };
-
-  const handlePrev = () => {
-    if (showroomPool.length > 2) {
-      setCurrentIndex((prev) => (prev - 2 + showroomPool.length) % showroomPool.length);
-    }
-  };
+  const currentProduct = showroomPool[currentIndex % (showroomPool.length || 1)] || null;
 
   return (
-    <section className="relative bg-gradient-to-b from-zinc-50 via-white to-zinc-50 text-zinc-900 overflow-hidden py-12 md:py-20 border-b border-zinc-200">
-      {/* Background Racing Atmosphere Grid */}
-      <div className="absolute inset-0 bg-carbon opacity-80"></div>
-      
-      {/* Redline Glow Accent Blur */}
-      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-red-600/10 blur-[120px] rounded-full pointer-events-none"></div>
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+    <section className="relative bg-white text-zinc-900 overflow-hidden py-12 sm:py-16 md:py-24 border-b border-zinc-200/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center">
           
-          {/* Left Column - Copy & Action Buttons */}
-          <div className="lg:col-span-5 space-y-6 text-left">
-            {/* Tagline Badges */}
+          {/* Left Column - Editorial Headline & Navigation */}
+          <div className="lg:col-span-7 space-y-6 text-left">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-1 rounded-full text-xs font-mono font-bold text-red-600 tracking-wider uppercase shadow-xs">
-                <Flame className="w-3.5 h-3.5 text-red-600 fill-red-600 animate-bounce" />
-                <span>India's Premier Hot Wheels Vault</span>
-              </div>
-              <a
-                href={BRAND_WHATSAPP_GROUP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 px-3 py-1 rounded-full text-xs font-mono font-bold tracking-wide transition shadow-xs group"
-              >
-                <MessageCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600 group-hover:scale-110 transition-transform" />
-                <span>Join VIP WhatsApp Group</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              </a>
+              <span className="inline-flex items-center gap-1.5 bg-zinc-900 text-white px-3 py-1 rounded-full text-[11px] font-mono font-bold tracking-widest uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+                <span>OFFICIAL DIE-CAST VAULT</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-zinc-100 text-zinc-700 px-3 py-1 rounded-full text-[11px] font-mono font-semibold border border-zinc-200">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>100% Factory Mint</span>
+              </span>
             </div>
 
-            {/* Main Headline */}
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight uppercase italic leading-[1.08] font-sans text-zinc-900">
-              Your Next <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-red-500 to-zinc-900">
-                Hot Wheels
-              </span>{' '}
-              Is Waiting.
-            </h1>
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider font-mono text-zinc-700">
-              Discover Hot Wheels mainlines, Premiums, rare finds & collector favourites.
-            </h2>
+            <div className="space-y-3">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-zinc-900 leading-[1.02] font-sans">
+                Precision Die-Cast. <br />
+                <span className="text-zinc-500 font-medium">Bespoke Creations.</span>
+              </h1>
+              <p className="text-sm sm:text-base text-zinc-600 max-w-xl font-normal leading-relaxed">
+                Authentic 1:64 scale collector models from Hot Wheels, Majorette, Mini GT, and CCA — alongside handcrafted photo blister cards, bouquets, and wall displays.
+              </p>
+            </div>
 
-            {/* Subtext */}
-            <p className="text-sm sm:text-base text-zinc-600 max-w-xl font-normal leading-relaxed">
-              Explore authentic 1:64 scale Mattel Hot Wheels, metal/metal real riders, rare collector chases, custom blister photo cards, and museum-grade shadowbox wall frames. Mint condition guaranteed.
-            </p>
-
-            {/* CTAs */}
-            <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3.5">
+            {/* Primary Action Buttons */}
+            <div className="pt-3 flex flex-wrap items-center gap-3">
               <button
-                onClick={() => onNavigate('featured-hotwheels')}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-extrabold px-6 py-3.5 rounded-xl text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-red-600/25 hover:shadow-red-500/40 active:scale-95 group cursor-pointer min-h-[44px]"
+                onClick={() => onNavigate('scalemodels')}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white font-mono font-bold px-6 sm:px-7 py-3.5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-zinc-900/10 transition-all cursor-pointer min-h-[48px]"
               >
-                <span>Explore Hot Wheels Collection</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <Car className="w-4 h-4 text-red-500" />
+                <span>Explore Scale Models</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
 
               <button
-                onClick={() => onNavigate('scanner')}
-                className="w-full sm:w-auto bg-white hover:bg-zinc-50 text-zinc-900 font-extrabold px-5 py-3.5 rounded-xl text-xs sm:text-sm uppercase tracking-wider border border-zinc-300 hover:border-red-600 flex items-center justify-center gap-2 transition-all active:scale-95 group shadow-xs cursor-pointer min-h-[44px]"
+                onClick={() => onNavigate('customcreation')}
+                className="bg-white hover:bg-zinc-50 text-zinc-900 font-mono font-bold px-5 sm:px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider border border-zinc-200 hover:border-zinc-900 flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer min-h-[48px]"
               >
-                <Camera className="w-4 h-4 text-red-600 group-hover:scale-110 transition-transform" />
-                <span>AI Rarity Scanner</span>
+                <Sparkles className="w-4 h-4 text-red-600" />
+                <span>Custom Creation</span>
+              </button>
+
+              <button
+                onClick={() => onNavigate('valuescanner')}
+                className="bg-zinc-950 hover:bg-zinc-900 text-white font-mono font-bold px-5 sm:px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider border border-sky-500/40 hover:border-sky-400 flex items-center justify-center gap-2 shadow-md shadow-sky-500/10 transition-all cursor-pointer min-h-[48px] group"
+              >
+                <Sparkles className="w-4 h-4 text-sky-400 group-hover:rotate-12 transition-transform" />
+                <span>AI Value Scanner</span>
+                <span className="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-500/40 px-1.5 py-0.5 rounded font-mono font-bold tracking-tight">
+                  AI-Powered
+                </span>
               </button>
             </div>
 
-            {/* Trust Highlights Strip */}
-            <div className="pt-4 sm:pt-5 border-t border-zinc-200 grid grid-cols-3 gap-2 sm:gap-3 text-left">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 bg-zinc-50/70 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-zinc-200">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-zinc-900 uppercase leading-tight">100% Authentic</div>
-                  <div className="text-[8px] sm:text-[9px] text-zinc-500 font-mono">Licensed Cars</div>
+            {/* Three Clean Apple-Style Standard Badges */}
+            <div className="pt-6 border-t border-zinc-100 grid grid-cols-3 gap-3 text-left font-mono">
+              <div className="space-y-0.5">
+                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Packaging</div>
+                <div className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-zinc-600" />
+                  <span>Armored Box</span>
                 </div>
               </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 bg-zinc-50/70 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-zinc-200">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-                  <Truck className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-zinc-900 uppercase leading-tight">Fast Dispatch</div>
-                  <div className="text-[8px] sm:text-[9px] text-zinc-500 font-mono">24-48H Express</div>
+              <div className="space-y-0.5">
+                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Dispatch</div>
+                <div className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-zinc-600" />
+                  <span>24–48 Hours</span>
                 </div>
               </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 bg-zinc-50/70 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-zinc-200">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-                  <Gift className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-zinc-900 uppercase leading-tight">Gift Ready</div>
-                  <div className="text-[8px] sm:text-[9px] text-zinc-500 font-mono">Satin Wrap</div>
+              <div className="space-y-0.5">
+                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Quality</div>
+                <div className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Carded / Mint</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column - 2-Product Auto-Rotating Showroom Stage */}
-          <div 
-            className="lg:col-span-7 relative"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-          >
-            {/* Soft accent glow backing */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-red-600/20 via-zinc-200 to-red-600/20 rounded-3xl blur-md opacity-60"></div>
-            
-            <div className="relative bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 overflow-hidden">
-              
-              {/* Top Header Controls with Live Rotation Indicator */}
-              <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <span className="bg-red-600 text-white font-mono font-black text-[10px] px-2.5 py-1 uppercase rounded-md tracking-wider shadow-xs flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                    FEATURED SHOWROOM
+          {/* Right Column - Spotlight Showcase Frame */}
+          <div className="lg:col-span-5">
+            {currentProduct ? (
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-3xl p-6 shadow-xs relative overflow-hidden transition-all text-left">
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-zinc-200/60">
+                  <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-zinc-500">
+                    FEATURED CASTING #{currentIndex + 1}
                   </span>
-                  <span className="hidden sm:inline-flex text-[10px] font-mono text-zinc-400">
-                    (Auto-Rotating every 2s)
-                  </span>
-                </div>
-
-                {showroomPool.length > 2 && (
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={handlePrev}
-                      aria-label="Previous featured item"
-                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center transition cursor-pointer"
+                      onClick={() => setCurrentIndex((prev) => (prev - 1 + showroomPool.length) % showroomPool.length)}
+                      className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                      aria-label="Previous product"
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="w-3.5 h-3.5" />
                     </button>
-
-                    <div className="flex items-center gap-1 px-1.5 font-mono text-[10px] text-zinc-500 font-bold">
-                      <span className="text-red-600">{currentSlide + 1}</span>
-                      <span>/</span>
-                      <span>{Math.max(1, totalSlides)}</span>
-                    </div>
-
                     <button
-                      onClick={handleNext}
-                      aria-label="Next featured item"
-                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center transition cursor-pointer"
+                      onClick={() => setCurrentIndex((prev) => (prev + 1) % showroomPool.length)}
+                      className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                      aria-label="Next product"
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* 2-Product Animated Container */}
-              {visibleProducts.length > 0 ? (
-                <div className="relative min-h-[360px] sm:min-h-[340px]">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={`slide-${currentIndex}`}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                      className={`grid gap-3.5 sm:gap-4 ${
-                        visibleProducts.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-md mx-auto'
-                      }`}
-                    >
-                      {visibleProducts.map((product, idx) => (
-                        <div
-                          key={`${product.id}-${currentIndex}-${idx}`}
-                          className="bg-zinc-50/90 hover:bg-white border border-zinc-200 hover:border-red-500/40 rounded-xl p-3 flex flex-col justify-between transition-all duration-300 shadow-xs hover:shadow-md group text-left"
-                        >
-                          {/* Image & Badges */}
-                          <div className="space-y-2.5">
-                            <div className="relative rounded-lg overflow-hidden border border-zinc-200">
-                              <ResponsiveImage
-                                src={product.image}
-                                alt={product.name}
-                                aspectRatio="4/3"
-                                priority={currentIndex === 0}
-                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 360px"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              />
-                              <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
-                                {product.isBestSeller && (
-                                  <span className="bg-amber-500 text-white font-mono font-bold text-[9px] px-1.5 py-0.5 rounded shadow-xs uppercase">
-                                    ★ Best Seller
-                                  </span>
-                                )}
-                                {product.isNewRelease && (
-                                  <span className="bg-red-600 text-white font-mono font-bold text-[9px] px-1.5 py-0.5 rounded shadow-xs uppercase">
-                                    New Drop
-                                  </span>
-                                )}
-                              </div>
-                              <div className="absolute bottom-1.5 right-2 bg-black/60 backdrop-blur-xs text-white font-mono text-[9px] px-1.5 py-0.5 rounded z-10">
-                                {product.stockCount > 0 ? `${product.stockCount} in stock` : 'Made to order'}
-                              </div>
-                            </div>
+                <div 
+                  onClick={() => onSelectProduct(currentProduct)}
+                  className="aspect-square bg-white rounded-2xl overflow-hidden my-4 flex items-center justify-center p-4 cursor-pointer group relative border border-zinc-200/80"
+                >
+                  <ResponsiveImage
+                    src={currentProduct.image || currentProduct.imageUrl}
+                    alt={currentProduct.name}
+                    aspectRatio="auto"
+                    priority={true}
+                    objectFit="contain"
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                  />
+                </div>
 
-                            {/* Product Info */}
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-red-600 font-mono font-bold uppercase tracking-wider truncate">
-                                  {product.shortTagline || 'Authentic Hot Wheels'}
-                                </span>
-                              </div>
-                              <h4 className="text-xs sm:text-sm font-black uppercase text-zinc-900 line-clamp-1 group-hover:text-red-600 transition-colors">
-                                {product.name}
-                              </h4>
-                            </div>
-                          </div>
-
-                          {/* Price & CTA */}
-                          <div className="pt-2.5 mt-2 border-t border-zinc-200/80 flex items-center justify-between gap-2">
-                            <div className="text-zinc-900 font-mono font-black text-sm sm:text-base">
-                              ₹{product.price.toFixed(2)}
-                            </div>
-                            <button
-                              onClick={() => onSelectProduct(product)}
-                              className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold font-mono uppercase px-3 py-2 rounded-lg transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
-                            >
-                              <span>View</span>
-                              <span>→</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
-
-                  {/* Auto-Rotation Progress Bar */}
-                  {showroomPool.length > 2 && (
-                    <div className="mt-3.5 pt-2 border-t border-zinc-100 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        {Array.from({ length: totalSlides }).map((_, sIdx) => (
-                          <button
-                            key={sIdx}
-                            onClick={() => setCurrentIndex(sIdx * 2)}
-                            aria-label={`Go to showroom slide ${sIdx + 1}`}
-                            className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                              sIdx === currentSlide
-                                ? 'w-6 bg-red-600'
-                                : 'w-2 bg-zinc-200 hover:bg-zinc-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      <span className="text-[10px] font-mono text-zinc-400">
-                        {isPaused ? 'Paused' : 'Cycling pairs'}
-                      </span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-0.5">
+                      {currentProduct.collectorSpecs?.scale || '1:64 Scale'}
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="py-10 text-center space-y-3">
-                  <div className="w-12 h-12 mx-auto rounded-full bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
-                    <Sparkles className="w-6 h-6 animate-pulse" />
+                    <div className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
+                      {currentProduct.name}
+                    </div>
+                    <div className="text-sm font-black text-zinc-900 font-mono mt-0.5">
+                      ₹{currentProduct.price.toLocaleString('en-IN')}
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-zinc-900 font-mono uppercase">Showroom Loading</h3>
-                  <p className="text-xs text-zinc-500">Live products syncing from garage vault...</p>
+
+                  <button
+                    onClick={() => onSelectProduct(currentProduct)}
+                    className="shrink-0 bg-zinc-900 hover:bg-red-600 text-white font-mono text-[10px] font-bold px-3.5 py-2 rounded-xl uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    View
+                  </button>
                 </div>
-              )}
-
-            </div>
+              </div>
+            ) : null}
           </div>
-
         </div>
       </div>
     </section>
   );
 };
-

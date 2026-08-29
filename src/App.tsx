@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { Product, CartItem, CustomCardConfig, CategoryId, UserProfile, PitCrewRole, Category } from './types';
-import { auth, isUserAdmin, fetchProductsFromFirestore, fetchUserProfile, customerSignOut } from './firebase';
+import { auth, isUserAdmin, fetchUserProfile, customerSignOut } from './firebase';
 import { fetchProductsFromSupabase, subscribeToProducts, fetchCategoriesFromSupabase, subscribeToCategories } from './supabase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { updateSEO } from './seo';
@@ -8,27 +8,19 @@ import { updateSEO } from './seo';
 import { ScrollProgressCar } from './components/ScrollProgressCar';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
-import { FeaturedHotWheelsSection } from './components/FeaturedHotWheelsSection';
-import { CollectorPicksSection } from './components/CollectorPicksSection';
-import { PremiumRareSection } from './components/PremiumRareSection';
-import { OtherCollectionsSection } from './components/OtherCollectionsSection';
-import { FinalCTASection } from './components/FinalCTASection';
-import { ProductCatalog } from './components/ProductCatalog';
+import { HomeCollectionsFeature } from './components/HomeCollectionsFeature';
+import { HomeSpotlightSection } from './components/HomeSpotlightSection';
+import { ScaleModelsPage } from './components/ScaleModelsPage';
+import { CustomCreationPage } from './components/CustomCreationPage';
 import { WhatsAppCommunityBanner } from './components/WhatsAppCommunityBanner';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
-import { BrandedLoadingScreen } from './components/BrandedLoadingScreen';
-import { BRAND_ASSETS, BRAND_NAME } from './brandAssets';
+import { PageLoadingState } from './components/LoadingSpinner';
 
-// Code-split heavy interactive components, modals, drawers, chatbot and admin portals for lightning initial load
-const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
-const ReferralClubSection = React.lazy(() => import('./components/ReferralClubSection').then(m => ({ default: m.ReferralClubSection })));
+// Lazy-load secondary and modal components
 const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
-const AskAiPitCrewSection = React.lazy(() => import('./components/AskAiPitCrewSection').then(m => ({ default: m.AskAiPitCrewSection })));
-const AskAiPitCrewModal = React.lazy(() => import('./components/AskAiPitCrewModal').then(m => ({ default: m.AskAiPitCrewModal })));
-const CollectorSpotlightSection = React.lazy(() => import('./components/CollectorSpotlightSection').then(m => ({ default: m.CollectorSpotlightSection })));
-const TestimonialsSection = React.lazy(() => import('./components/TestimonialsSection').then(m => ({ default: m.TestimonialsSection })));
-const OrderAndContactSection = React.lazy(() => import('./components/OrderAndContactSection').then(m => ({ default: m.OrderAndContactSection })));
+const TrackOrderPage = React.lazy(() => import('./components/TrackOrderPage').then(m => ({ default: m.TrackOrderPage })));
+const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
 const FAQSection = React.lazy(() => import('./components/FAQSection').then(m => ({ default: m.FAQSection })));
 const BirthdayCelebrationModal = React.lazy(() => import('./components/BirthdayCelebrationModal').then(m => ({ default: m.BirthdayCelebrationModal })));
 const CartDrawer = React.lazy(() => import('./components/CartDrawer').then(m => ({ default: m.CartDrawer })));
@@ -40,17 +32,15 @@ const CustomerAuth = React.lazy(() => import('./components/CustomerAuth').then(m
 const AdminLogin = React.lazy(() => import('./components/admin/AdminLogin').then(m => ({ default: m.AdminLogin })));
 const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
-type AppRoute = 'store' | 'customer-login' | 'admin-login' | 'admin';
+type AppRoute = 'home' | 'scalemodels' | 'hotwheels' | 'majorette' | 'minigt' | 'cca' | 'customcreation' | 'valuescanner' | 'track-order' | 'customer-login' | 'admin-login' | 'admin';
 
 export default function App() {
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>('store');
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>('home');
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [customerUser, setCustomerUser] = useState<User | null>(null);
   const [customerProfile, setCustomerProfile] = useState<UserProfile | null>(null);
   const [isOrdersModalOpen, setIsOrdersModalOpen] = useState(false);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
-  const [isPitCrewModalOpen, setIsPitCrewModalOpen] = useState(false);
-  const [pitCrewRole, setPitCrewRole] = useState<PitCrewRole>('turbo');
 
   // Products and Categories loaded from live Supabase database
   const [productsList, setProductsList] = useState<Product[]>([]);
@@ -60,7 +50,6 @@ export default function App() {
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
@@ -70,15 +59,31 @@ export default function App() {
     if (cleanPath === '/admin/login') return 'admin-login';
     if (cleanPath === '/admin') return 'admin';
     if (cleanPath === '/login') return 'customer-login';
-    return 'store';
+    if (cleanPath === '/scalemodels' || cleanPath === '/scale-models') return 'scalemodels';
+    if (cleanPath === '/hotwheels' || cleanPath === '/hot-wheels') return 'hotwheels';
+    if (cleanPath === '/majorette') return 'majorette';
+    if (cleanPath === '/minigt' || cleanPath === '/mini-gt') return 'minigt';
+    if (cleanPath === '/cca') return 'cca';
+    if (cleanPath === '/customcreation' || cleanPath === '/custom-creation') return 'customcreation';
+    if (cleanPath === '/valuescanner' || cleanPath === '/value-scanner' || cleanPath === '/scanner') return 'valuescanner';
+    if (cleanPath === '/track-order' || cleanPath === '/trackorder' || cleanPath === '/tracking' || cleanPath === '/track') return 'track-order';
+    return 'home';
   };
 
   // Synchronize URL and Routing
-  const navigateToRoute = (route: AppRoute) => {
+  const navigateToRoute = (route: AppRoute, subParam?: string) => {
     let path = '/';
     if (route === 'admin-login') path = '/admin/login';
     if (route === 'admin') path = '/admin';
     if (route === 'customer-login') path = '/login';
+    if (route === 'scalemodels') path = '/scalemodels';
+    if (route === 'hotwheels') path = '/hotwheels';
+    if (route === 'majorette') path = '/majorette';
+    if (route === 'minigt') path = '/minigt';
+    if (route === 'cca') path = '/cca';
+    if (route === 'customcreation') path = '/customcreation';
+    if (route === 'valuescanner') path = '/valuescanner';
+    if (route === 'track-order') path = '/track-order';
 
     window.history.pushState({}, '', path);
     setCurrentRoute(route);
@@ -123,8 +128,7 @@ export default function App() {
       const pathRoute = getRouteFromPath(window.location.pathname);
       if (pathRoute === 'admin') {
         if (!isAdmin) {
-          // If someone who is not logged in tries to open /admin, redirect them to homepage
-          navigateToRoute('store');
+          navigateToRoute('home');
         } else {
           setCurrentRoute('admin');
         }
@@ -136,114 +140,52 @@ export default function App() {
         }
       } else if (pathRoute === 'customer-login') {
         if (user && !isAdmin) {
-          navigateToRoute('store');
+          navigateToRoute('home');
         } else {
           setCurrentRoute('customer-login');
         }
       } else {
-        setCurrentRoute('store');
+        setCurrentRoute(pathRoute);
       }
     });
 
     const handlePopState = () => {
       const pathRoute = getRouteFromPath(window.location.pathname);
       if (pathRoute === 'admin' && (!auth.currentUser || !isUserAdmin(auth.currentUser))) {
-        navigateToRoute('store');
+        navigateToRoute('home');
       } else {
         setCurrentRoute(pathRoute);
       }
     };
 
-    // Detect legacy/external hash-based URLs (e.g. /#catalog, /#categories, /#scanner, /#faq)
-    // and map them into clean state/scroll actions while normalizing the browser history
-    const processHashRouting = () => {
-      const rawHash = window.location.hash ? window.location.hash.replace(/^#\/?/, '').toLowerCase() : '';
-      if (!rawHash) return;
-
-      const categorySlugs = ['bouquets', 'frames', 'custom-cards', 'scale-models'];
-      if (categorySlugs.includes(rawHash)) {
-        setSelectedCategory(rawHash);
-        const newUrl = new URL(window.location.href);
-        newUrl.hash = '';
-        newUrl.searchParams.set('category', rawHash);
-        window.history.replaceState({}, '', newUrl.toString());
-        setTimeout(() => {
-          const catalogElem = document.getElementById('catalog');
-          if (catalogElem) catalogElem.scrollIntoView({ behavior: 'smooth' });
-        }, 150);
-        return;
-      }
-
-      if (rawHash === 'catalog' || rawHash === 'categories' || rawHash === 'shop') {
-        const newUrl = new URL(window.location.href);
-        newUrl.hash = '';
-        window.history.replaceState({}, '', newUrl.toString());
-        setTimeout(() => {
-          const target = document.getElementById(rawHash === 'categories' ? 'categories' : 'catalog');
-          if (target) target.scrollIntoView({ behavior: 'smooth' });
-        }, 150);
-        return;
-      }
-
-      const matchingElem = document.getElementById(rawHash);
-      if (matchingElem) {
-        const newUrl = new URL(window.location.href);
-        newUrl.hash = '';
-        window.history.replaceState({}, '', newUrl.toString());
-        setTimeout(() => {
-          matchingElem.scrollIntoView({ behavior: 'smooth' });
-        }, 150);
-      }
-    };
-
-    // Check for referral codes in query parameters (?ref=... or ?referral=... or ?coupon=...)
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const refParam = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('coupon');
-      if (refParam) {
-        sessionStorage.setItem('redline_active_referral_code', refParam.trim().toUpperCase());
-      }
-    } catch {
-      // safe ignore
-    }
-
-    processHashRouting();
-
     window.addEventListener('popstate', handlePopState);
-    window.addEventListener('hashchange', processHashRouting);
     return () => {
       unsubscribe();
       window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('hashchange', processHashRouting);
     };
   }, []);
 
-  // Trigger subtle, non-intrusive sync status indicator
-  const triggerSyncNotice = () => {
-    setIsDataSyncing(true);
-    setTimeout(() => {
-      setIsDataSyncing(false);
-    }, 1800);
-  };
-
-  // Fetch live products & categories directly from Supabase & keep live sync
-  const loadStoreData = async (showNotice = false) => {
-    if (showNotice) {
-      setIsDataSyncing(true);
-    }
+  // Load products & categories from Supabase
+  const loadStoreData = async (showSyncSpinner = false) => {
+    if (showSyncSpinner) setIsDataSyncing(true);
     try {
-      const [supabaseProds, supabaseCats] = await Promise.all([
+      const [fetchedProds, fetchedCats] = await Promise.all([
         fetchProductsFromSupabase(),
         fetchCategoriesFromSupabase(),
       ]);
-      setProductsList(supabaseProds || []);
-      setCategoriesList(supabaseCats || []);
+
+      if (fetchedProds && fetchedProds.length > 0) {
+        setProductsList(fetchedProds);
+      }
+      if (fetchedCats && fetchedCats.length > 0) {
+        setCategoriesList(fetchedCats);
+      }
     } catch (err) {
-      console.warn('Error loading live store data from Supabase:', err);
+      console.error('Failed to load store data from Supabase:', err);
     } finally {
       setIsInitialDataLoading(false);
-      if (showNotice) {
-        setTimeout(() => setIsDataSyncing(false), 1200);
+      if (showSyncSpinner) {
+        setTimeout(() => setIsDataSyncing(false), 800);
       }
     }
   };
@@ -253,18 +195,16 @@ export default function App() {
     loadStoreData();
 
     const unsubProds = subscribeToProducts((freshProducts) => {
-      if (isMounted) {
-        setProductsList(freshProducts || []);
+      if (isMounted && freshProducts) {
+        setProductsList(freshProducts);
         setIsInitialDataLoading(false);
-        triggerSyncNotice();
       }
     });
 
     const unsubCats = subscribeToCategories((freshCats) => {
-      if (isMounted) {
-        setCategoriesList(freshCats || []);
+      if (isMounted && freshCats) {
+        setCategoriesList(freshCats);
         setIsInitialDataLoading(false);
-        triggerSyncNotice();
       }
     });
 
@@ -275,50 +215,16 @@ export default function App() {
     };
   }, []);
 
-  // Deep-link product & category query parameters on initial load & popstate
-  useEffect(() => {
-    if (productsList.length === 0) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const productIdParam = urlParams.get('product');
-    const categoryParam = urlParams.get('category');
-
-    if (productIdParam) {
-      const found = productsList.find(p => p.id === productIdParam || p.id.toLowerCase() === productIdParam.toLowerCase());
-      if (found && (!quickViewProduct || quickViewProduct.id !== found.id)) {
-        setQuickViewProduct(found);
-      }
-    }
-
-    if (categoryParam) {
-      setSelectedCategory(categoryParam);
-    }
-  }, [productsList]);
-
-  // Handle QuickView product modal state & URL synchronization
+  // QuickView product modal state & URL synchronization
   const handleOpenQuickView = (product: Product) => {
     setQuickViewProduct(product);
-    try {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('product', product.id);
-      window.history.pushState({ productId: product.id }, '', newUrl.toString());
-    } catch (err) {
-      console.warn('URL sync note:', err);
-    }
   };
 
   const handleCloseQuickView = () => {
     setQuickViewProduct(null);
-    try {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('product');
-      window.history.pushState({}, '', newUrl.toString());
-    } catch (err) {
-      console.warn('URL sync note:', err);
-    }
   };
 
-  // Dynamic SEO metadata update for Google, WhatsApp & Social link previews
+  // Dynamic SEO metadata update
   useEffect(() => {
     if (quickViewProduct) {
       updateSEO({ 
@@ -327,34 +233,29 @@ export default function App() {
         categoryName: quickViewProduct.category,
       });
     } else if (currentRoute === 'admin' || currentRoute === 'admin-login') {
-      updateSEO({
-        pageType: 'admin',
-      });
+      updateSEO({ pageType: 'admin' });
     } else if (currentRoute === 'customer-login') {
-      updateSEO({
-        pageType: 'login',
-      });
-    } else if (selectedCategory && selectedCategory !== 'all') {
+      updateSEO({ pageType: 'login' });
+    } else if (currentRoute === 'scalemodels' || currentRoute === 'hotwheels' || currentRoute === 'majorette' || currentRoute === 'minigt' || currentRoute === 'cca') {
       updateSEO({
         pageType: 'shop',
-        title: `Shop Hot Wheels ${selectedCategory.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Online in India | Redline Garage`,
+        title: `Scale Models 1:64 Die-Cast Collection | Redline Garage India`,
       });
-    } else if (searchQuery.trim()) {
+    } else if (currentRoute === 'customcreation') {
       updateSEO({
         pageType: 'shop',
-        title: `Search: "${searchQuery}" — Hot Wheels Die-Cast Models | Redline Garage`,
+        title: `Custom Creation Handcrafted Studio — Frames, Bouquets & Custom Cards | Redline Garage`,
+      });
+    } else if (currentRoute === 'valuescanner') {
+      updateSEO({
+        pageType: 'scanner',
+        title: `AI Die-Cast Value Scanner — Instant Hot Wheels & Model Pricing | Redline Garage`,
+        description: `Instant AI appraisal for Hot Wheels, Mini GT, Majorette and CCA die-cast models in Indian secondary market with real-time Gemini vision.`
       });
     } else {
-      updateSEO({
-        pageType: 'home',
-      });
+      updateSEO({ pageType: 'home' });
     }
-  }, [currentRoute, quickViewProduct, selectedCategory, searchQuery]);
-
-
-  // Hero flagship & Custom Card products (from live database)
-  const heroProduct = productsList.length > 0 ? productsList[0] : null;
-  const customCardProduct = productsList.find(p => p.id === 'custom-card-personal' || p.category === 'custom-cards') || (productsList.length > 0 ? productsList[0] : null);
+  }, [currentRoute, quickViewProduct]);
 
   // Customer signout handler
   const handleCustomerSignOut = async () => {
@@ -399,18 +300,6 @@ export default function App() {
     setIsCartOpen(true);
   };
 
-  // Add customized card product to cart
-  const handleAddToCartWithCustomization = (product: Product, config: CustomCardConfig) => {
-    const newItem: CartItem = {
-      id: `custom-cart-${Date.now()}`,
-      product,
-      quantity: 1,
-      customization: config,
-    };
-    setCartItems(prev => [...prev, newItem]);
-    setIsCartOpen(true);
-  };
-
   // Cart item management
   const handleUpdateQuantity = (id: string, delta: number) => {
     setCartItems(prev =>
@@ -434,256 +323,207 @@ export default function App() {
     setCartItems([]);
   };
 
-  // Section smooth scrolling
-  const handleNavigate = (sectionId: string) => {
-    if (currentRoute !== 'store') {
-      navigateToRoute('store');
+  // Navigation router helper
+  const handleNavigate = (routeOrSection: string, subParam?: string) => {
+    if (['home', 'scalemodels', 'hotwheels', 'majorette', 'minigt', 'cca', 'customcreation', 'valuescanner', 'customer-login', 'admin-login', 'admin'].includes(routeOrSection)) {
+      navigateToRoute(routeOrSection as AppRoute, subParam);
+      return;
+    }
+    if (routeOrSection === 'hero') {
+      navigateToRoute('home');
+      return;
+    }
+    if (routeOrSection === 'valuescanner' || routeOrSection === 'scanner') {
+      navigateToRoute('valuescanner');
+      return;
+    }
+    // If it's a section on home page
+    if (currentRoute !== 'home') {
+      navigateToRoute('home');
       setTimeout(() => {
-        const elem = document.getElementById(sectionId);
+        const elem = document.getElementById(routeOrSection);
         if (elem) elem.scrollIntoView({ behavior: 'smooth' });
       }, 100);
-      return;
-    }
-
-    if (sectionId === 'hero') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    const elem = document.getElementById(sectionId);
-    if (elem) {
-      elem.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      const elem = document.getElementById(routeOrSection);
+      if (elem) elem.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // Select category and jump to catalog
-  const handleSelectCategory = (category: string) => {
-    setSelectedCategory(category);
-    handleNavigate('catalog');
-  };
+  // Show loading indicator on first start
+  if (isInitialDataLoading && productsList.length === 0) {
+    return <PageLoadingState />;
+  }
 
-  // -------------------------------------------------------------
-  // ROUTE 1: CUSTOMER LOGIN/SIGNUP PAGE (/login)
-  // -------------------------------------------------------------
-  if (currentRoute === 'customer-login') {
+  // Admin Views
+  if (currentRoute === 'admin') {
     return (
-      <Suspense fallback={<BrandedLoadingScreen message="Accessing Collector Portal..." submessage="Preparing your garage credentials & orders" />}>
-        <CustomerAuth
-          onSuccess={(profile) => {
-            setCustomerProfile(profile);
-            navigateToRoute('store');
+      <Suspense fallback={<PageLoadingState />}>
+        <AdminDashboard
+          onLogout={() => {
+            customerSignOut();
+            navigateToRoute('home');
           }}
-          onBackToStore={() => navigateToRoute('store')}
+          onBackToStore={() => navigateToRoute('home')}
         />
       </Suspense>
     );
   }
 
-  // -------------------------------------------------------------
-  // ROUTE 2: ADMIN LOGIN PAGE (/admin/login)
-  // -------------------------------------------------------------
   if (currentRoute === 'admin-login') {
     return (
-      <Suspense fallback={<BrandedLoadingScreen message="Opening Admin Portal..." submessage="Verifying authorized owner credentials" />}>
+      <Suspense fallback={<PageLoadingState />}>
         <AdminLogin
           onLoginSuccess={() => navigateToRoute('admin')}
-          onBackToStore={() => navigateToRoute('store')}
+          onBackToStore={() => navigateToRoute('home')}
         />
       </Suspense>
     );
   }
 
-  // -------------------------------------------------------------
-  // ROUTE 3: ADMIN DASHBOARD PAGE (/admin)
-  // -------------------------------------------------------------
-  if (currentRoute === 'admin') {
-    // If not logged in as authorized admin, silently redirect to homepage
-    if (!adminUser) {
-      setTimeout(() => navigateToRoute('store'), 0);
-      return null;
-    }
-
+  if (currentRoute === 'customer-login') {
     return (
-      <Suspense fallback={<BrandedLoadingScreen message={`Loading ${BRAND_NAME} Command Center...`} submessage="Syncing products, orders, inventory & Supabase database" />}>
-        <AdminDashboard
-          onLogout={() => navigateToRoute('store')}
-          onBackToStore={() => navigateToRoute('store')}
+      <Suspense fallback={<PageLoadingState />}>
+        <CustomerAuth
+          onSuccess={() => navigateToRoute('home')}
+          onBackToStore={() => navigateToRoute('home')}
         />
       </Suspense>
     );
   }
 
-  // -------------------------------------------------------------
-  // ROUTE 4: CUSTOMER STOREFRONT (/)
-  // -------------------------------------------------------------
-  if (isInitialDataLoading && productsList.length === 0) {
-    return (
-      <BrandedLoadingScreen
-        fullScreen={true}
-        message="Loading Authentic Die-Cast Collection..."
-        submessage="Connecting to Redline Garage Vault & Live Inventory"
-        onRetry={loadStoreData}
-      />
-    );
-  }
+  const isScaleModelsView = ['scalemodels', 'hotwheels', 'majorette', 'minigt', 'cca'].includes(currentRoute);
+  const scaleSubCol = currentRoute === 'scalemodels' ? 'all' : (currentRoute as 'hotwheels' | 'majorette' | 'minigt' | 'cca');
 
   return (
-    <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased selection:bg-red-600 selection:text-white pb-20 md:pb-0 w-full max-w-full overflow-x-hidden">
-      {/* Scroll Progress Driving Car Bar */}
+    <div className="min-h-screen bg-white text-zinc-900 flex flex-col selection:bg-red-600 selection:text-white font-sans antialiased">
       <ScrollProgressCar />
 
-      {/* Header Navigation with Customer Auth & Past Orders */}
+      {/* Main Apple-Style Top Navigation */}
       <Navbar
         cartCount={cartItems.reduce((acc, i) => acc + i.quantity, 0)}
         onOpenCart={() => setIsCartOpen(true)}
         onNavigate={handleNavigate}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        onOpenAdmin={() => navigateToRoute(adminUser ? 'admin' : 'admin-login')}
         userProfile={customerProfile}
         onOpenCustomerLogin={() => navigateToRoute('customer-login')}
         onOpenMyOrders={() => setIsOrdersModalOpen(true)}
         onCustomerLogout={handleCustomerSignOut}
         onOpenWishlist={() => setIsWishlistOpen(true)}
-        onOpenPitCrew={(role) => {
-          if (role) setPitCrewRole(role);
-          setIsPitCrewModalOpen(true);
-        }}
+        currentRoute={currentRoute}
       />
 
-      {/* 1. Hero Section (Hot Wheels Focused) */}
-      <div id="hero">
-        <HeroSection
-          heroProduct={heroProduct}
-          products={productsList}
-          onSelectProduct={(p) => handleOpenQuickView(p)}
-          onNavigate={handleNavigate}
-        />
-      </div>
+      {/* Main Content Area Based on Current Route */}
+      <main className="flex-1">
+        {/* VIEW 1: Scale Models Primary Collection & Sub-Collections */}
+        {isScaleModelsView && (
+          <ScaleModelsPage
+            products={productsList}
+            currentSubCollection={scaleSubCol}
+            onSelectSubCollection={(sub) => {
+              if (sub === 'all') navigateToRoute('scalemodels');
+              else navigateToRoute(sub);
+            }}
+            onAddToCart={handleAddToCart}
+            onQuickView={handleOpenQuickView}
+            userProfile={customerProfile}
+            onNavigateHome={() => navigateToRoute('home')}
+          />
+        )}
 
-      {/* 2. Featured Hot Wheels Collection (Immediate Focus) */}
-      <FeaturedHotWheelsSection
-        products={productsList}
-        onAddToCart={handleAddToCart}
-        onQuickView={(p) => handleOpenQuickView(p)}
-        onNavigateToCatalog={(cat) => {
-          if (cat) setSelectedCategory(cat);
-          handleNavigate('catalog');
-        }}
-        userProfile={customerProfile}
-      />
+        {/* VIEW 2: Custom Creation Primary Collection (Frames, Bouquets, Custom Cards) */}
+        {currentRoute === 'customcreation' && (
+          <CustomCreationPage
+            products={productsList}
+            onAddToCart={handleAddToCart}
+            onQuickView={handleOpenQuickView}
+            userProfile={customerProfile}
+            onNavigateHome={() => navigateToRoute('home')}
+          />
+        )}
 
-      {/* Highlighted WhatsApp Collector VIP Community Banner */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-8 sm:my-12">
-        <WhatsAppCommunityBanner />
-      </section>
+        {/* VIEW 3: Dedicated AI Value Scanner Page */}
+        {currentRoute === 'valuescanner' && (
+          <Suspense fallback={<PageLoadingState />}>
+            <ValueScanner onNavigate={handleNavigate} />
+          </Suspense>
+        )}
 
-      {/* 3. Best Sellers & Collector Picks */}
-      <CollectorPicksSection
-        products={productsList}
-        onAddToCart={handleAddToCart}
-        onQuickView={(p) => handleOpenQuickView(p)}
-        onNavigateToCatalog={(cat) => {
-          if (cat) setSelectedCategory(cat);
-          handleNavigate('catalog');
-        }}
-        userProfile={customerProfile}
-      />
+        {/* VIEW 4: Dedicated Track Your Order Page */}
+        {currentRoute === 'track-order' && (
+          <Suspense fallback={<PageLoadingState />}>
+            <TrackOrderPage onNavigate={handleNavigate} />
+          </Suspense>
+        )}
 
-      {/* 4. Premium & Rare Hot Wheels (Real Riders & Chases) */}
-      <PremiumRareSection
-        products={productsList}
-        onAddToCart={handleAddToCart}
-        onQuickView={(p) => handleOpenQuickView(p)}
-        onNavigateToCatalog={(cat) => {
-          if (cat) setSelectedCategory(cat);
-          handleNavigate('catalog');
-        }}
-        userProfile={customerProfile}
-      />
+        {/* VIEW 4: Clean Apple-Style Minimalist Homepage */}
+        {currentRoute === 'home' && (
+          <div>
+            {/* 1. Hero Section with Direct Scale Models & Custom Creation Actions */}
+            <HeroSection
+              products={productsList}
+              onSelectProduct={handleOpenQuickView}
+              onNavigate={handleNavigate}
+            />
 
-      {/* 5. Other Diecast Collections (Bouquets, Frames, Custom Cards) */}
-      <OtherCollectionsSection
-        categories={categoriesList}
-        isLoading={isInitialDataLoading}
-        onSelectCategory={(catId: CategoryId) => handleSelectCategory(catId)}
-      />
+            {/* 2. Apple-Style Collection Feature Cards (Two Primary Paths) */}
+            <HomeCollectionsFeature
+              onNavigateToScaleModels={() => navigateToRoute('scalemodels')}
+              onNavigateToCustomCreation={() => navigateToRoute('customcreation')}
+            />
 
-      {/* Full Interactive Product Catalog & Search Grid */}
-      <ProductCatalog
-        products={productsList}
-        categories={categoriesList}
-        isLoading={isInitialDataLoading}
-        onRetry={loadStoreData}
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
-        onAddToCart={handleAddToCart}
-        onQuickView={(p) => handleOpenQuickView(p)}
-        searchQuery={searchQuery}
-        userProfile={customerProfile}
-        onOpenWishlist={() => setIsWishlistOpen(true)}
-      />
+            {/* 3. Curated Homepage Spotlight (Small hand-picked section) */}
+            <HomeSpotlightSection
+              products={productsList}
+              onAddToCart={handleAddToCart}
+              onQuickView={handleOpenQuickView}
+              onNavigateToScaleModels={() => navigateToRoute('scalemodels')}
+              onNavigateToCustomCreation={() => navigateToRoute('customcreation')}
+              userProfile={customerProfile}
+            />
 
-      {/* Below-the-fold lazy sections with minimal skeleton fallback */}
-      <Suspense fallback={<div className="py-12 flex justify-center"><div className="w-6 h-6 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>}>
-        {/* AI Hot Wheels Value & Rarity Scanner */}
-        <div id="scanner">
-          <ValueScanner />
-        </div>
+            {/* 4. The Redline Standard & Quality Commitment */}
+            <Suspense fallback={null}>
+              <WhyRedline />
+            </Suspense>
 
-        {/* Ask AI Pit Crew Interactive Team Showcase Section */}
-        <AskAiPitCrewSection
-          onOpenChat={(role) => {
-            if (role) setPitCrewRole(role);
-            setIsPitCrewModalOpen(true);
-          }}
-        />
+            {/* 5. Highlighted WhatsApp Collector VIP Community Banner */}
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-8 sm:my-12">
+              <WhatsAppCommunityBanner />
+            </section>
 
-        {/* 6. Why Shop With Us (The Redline Standard) */}
-        <WhyRedline />
+            {/* 6. FAQ Section */}
+            <Suspense fallback={null}>
+              <div id="faq">
+                <FAQSection />
+              </div>
+            </Suspense>
+          </div>
+        )}
+      </main>
 
-        {/* Collector Referral Club — Share & Earn Section */}
-        <ReferralClubSection
-          userProfile={customerProfile}
-          onOpenCart={() => setIsCartOpen(true)}
-        />
-
-        {/* Collector of the Month Community Spotlight */}
-        <CollectorSpotlightSection />
-
-        {/* 7. Customer Reviews & Collector Feedback */}
-        <TestimonialsSection />
-
-        {/* 8. Final CTA (Ready to Level Up Your Hot Wheels Collection?) */}
-        <FinalCTASection onNavigate={handleNavigate} />
-
-        {/* Order & Contact Channels Section */}
-        <OrderAndContactSection onOpenCart={() => setIsCartOpen(true)} />
-
-        {/* FAQ Accordion Section */}
-        <FAQSection />
-
-        {/* Birthday Celebration Auto-Discount Modal */}
-        <BirthdayCelebrationModal
-          userProfile={customerProfile}
-          onApplyCode={() => {
-            setIsCartOpen(true);
-          }}
-        />
-      </Suspense>
-
-      {/* 9. Showroom Footer with Admin Portal Access & Track Order */}
+      {/* Showroom Footer */}
       <Footer
         onNavigate={handleNavigate}
-        onSelectCategory={handleSelectCategory}
+        onSelectCategory={(cat) => {
+          if (['frames', 'bouquets', 'custom-cards'].includes(cat)) {
+            navigateToRoute('customcreation', cat);
+          } else if (['hotwheels', 'majorette', 'minigt', 'cca'].includes(cat)) {
+            navigateToRoute(cat as AppRoute);
+          } else {
+            navigateToRoute('scalemodels');
+          }
+        }}
         onOpenAdmin={() => navigateToRoute(adminUser ? 'admin' : 'admin-login')}
         onOpenMyOrders={() => setIsOrdersModalOpen(true)}
         isDataSyncing={isDataSyncing}
         onForceSync={() => loadStoreData(true)}
       />
 
-      {/* Lazy Modals & Drawers */}
+      {/* Global Modals & Drawers */}
       <Suspense fallback={null}>
-        {/* Shopping Cart Drawer with User Connection */}
+        {/* Shopping Cart Drawer */}
         {isCartOpen && (
           <CartDrawer
             isOpen={isCartOpen}
@@ -712,7 +552,7 @@ export default function App() {
             onClose={() => setIsWishlistOpen(false)}
             products={productsList}
             onAddToCart={handleAddToCart}
-            onQuickView={(p) => handleOpenQuickView(p)}
+            onQuickView={handleOpenQuickView}
             userProfile={customerProfile}
             onOpenCustomerLogin={() => navigateToRoute('customer-login')}
           />
@@ -727,20 +567,16 @@ export default function App() {
           />
         )}
 
-        {/* Dedicated Full Ask AI Pit Crew Modal */}
-        {isPitCrewModalOpen && (
-          <AskAiPitCrewModal
-            isOpen={isPitCrewModalOpen}
-            onClose={() => setIsPitCrewModalOpen(false)}
-            onNavigate={handleNavigate}
-            initialRole={pitCrewRole}
-          />
-        )}
+        {/* Birthday Celebration Auto-Discount Modal */}
+        <BirthdayCelebrationModal
+          userProfile={customerProfile}
+          onApplyCode={() => {
+            setIsCartOpen(true);
+          }}
+        />
 
-        {/* Floating Redline Garage AI Pit Crew Chatbot */}
-        {!isPitCrewModalOpen && (
-          <GeminiChatbot onNavigate={handleNavigate} />
-        )}
+        {/* Floating AI Pit Crew Assistant */}
+        <GeminiChatbot onNavigate={handleNavigate} />
       </Suspense>
 
       {/* Mobile Floating Bottom Navigation Bar */}
@@ -750,9 +586,9 @@ export default function App() {
         onNavigate={handleNavigate}
         userProfile={customerProfile}
         onOpenOrders={() => setIsOrdersModalOpen(true)}
-        onOpenCustomerLogin={() => navigateToRoute('customer-login')}
+        onOpenWishlist={() => setIsWishlistOpen(true)}
+        currentRoute={currentRoute}
       />
     </div>
   );
 }
-

@@ -1,10 +1,12 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 // Initialize environment variables from .env / .env.local for local & production Hostinger deployments
 dotenv.config();
@@ -180,19 +182,31 @@ async function startServer() {
   });
 
   // Server-side Gemini API route for "Scan Your Hot Wheels" (Value Scanner)
-  app.post('/api/gemini/scan-hotwheels', async (req, res) => {
+  const handleHotWheelsScan = async (req: express.Request, res: express.Response) => {
     const scanStartTime = Date.now();
-    console.log(`[ValueScanner Server Diagnostic ${new Date().toISOString()}] Received scan request.`);
+    const scanId = Math.random().toString(36).substring(2, 9);
+    console.log(`[ValueScanner Server Diagnostic #${scanId} ${new Date().toISOString()}] Received new scan request.`);
 
     try {
-      const { imageBase64, mimeType = 'image/jpeg' } = req.body;
+      const {
+        imageBase64,
+        mimeType = 'image/jpeg',
+        fileName,
+        modelName,
+        condition = 'Mint on Card (Carded)',
+        brand = 'Hot Wheels',
+        notes = '',
+      } = req.body;
 
-      if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
-        console.warn('[ValueScanner Server Diagnostic] 400 Bad Request: Missing or invalid imageBase64 in request body');
+      const hasImage = Boolean(imageBase64 && typeof imageBase64 === 'string' && imageBase64.trim().length > 0);
+      const hasText = Boolean(modelName && typeof modelName === 'string' && modelName.trim().length > 0);
+
+      if (!hasImage && !hasText) {
+        console.warn(`[ValueScanner Server Diagnostic #${scanId}] 400 Bad Request: Neither image nor modelName provided.`);
         return res.status(400).json({
           success: false,
           errorType: 'invalid_input',
-          error: 'Missing or corrupted image data. Please upload a valid JPG, PNG, or WEBP photo.',
+          error: 'Please upload a photo or enter the die-cast model name/description to scan value.',
           elapsedMs: Date.now() - scanStartTime,
         });
       }
@@ -200,41 +214,35 @@ async function startServer() {
       const { key: apiKey, source: apiKeySource } = getGeminiApiKey();
       const isApiKeySet = Boolean(apiKey && apiKey.length > 0);
 
-      console.log(`[ValueScanner Server Diagnostic] Environment Key Check: configured=${isApiKeySet}, source=${apiKeySource}, keyLength=${apiKey?.length || 0}`);
-
-      // Extract raw base64 and mime type
-      let rawBase64 = imageBase64;
+      // Extract raw base64 and mime type if image is provided
+      let rawBase64 = '';
       let resolvedMimeType = mimeType;
 
-      if (imageBase64.startsWith('data:')) {
-        const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
-        if (mimeMatch) {
-          resolvedMimeType = mimeMatch[1];
+      if (hasImage) {
+        rawBase64 = imageBase64;
+        if (imageBase64.startsWith('data:')) {
+          const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
+          if (mimeMatch) {
+            resolvedMimeType = mimeMatch[1];
+          }
+          rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
         }
-        rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
       }
 
+      const imageHash = hasImage ? crypto.createHash('md5').update(rawBase64).digest('hex').substring(0, 10) : 'text-only';
+      const payloadKb = hasImage ? (rawBase64.length / 1024).toFixed(1) : '0';
+
+      console.log(`[ValueScanner Server Diagnostic #${scanId}] Scan Request: hasImage=${hasImage}, size=${payloadKb}KB, modelName="${modelName || 'N/A'}", brand="${brand}", condition="${condition}", keyConfigured=${isApiKeySet} (${apiKeySource})`);
+
       if (!isApiKeySet) {
-        console.warn('[ValueScanner Server Diagnostic] NOTICE: GEMINI_API_KEY is not defined in environment. For Hostinger deployments: Add GEMINI_API_KEY in Hostinger hPanel -> Advanced / Node.js -> Environment Variables.');
-        // High quality fallback appraisal if no API key is attached yet
-        return res.json({
-          success: true,
-          isAiLive: false,
+        console.warn(`[ValueScanner Server Diagnostic #${scanId}] GEMINI_API_KEY is not defined in server environment.`);
+        return res.status(500).json({
+          success: false,
+          errorType: 'internal_api_error',
+          error: 'Gemini API key is not configured on the server. Please ensure GEMINI_API_KEY is configured in server settings.',
           isApiKeyConfigured: false,
           apiKeySource: 'NONE',
-          diagnosticNotice: 'GEMINI_API_KEY is not configured on this host. Using high-fidelity valuation engine template.',
-          data: {
-            isHotWheelsOrDiecast: true,
-            carModelName: 'Nissan Skyline GT-R (BNR34) / JDM Die-Cast Spec',
-            seriesAndYear: '2023 Mainline / Factory Fresh Series #4 of 10',
-            categoryType: 'Mainline with High Collector Demand',
-            conditionAssessment: 'Packaging Card in Near Mint (NM) condition. Blister bubble clear with no cracks, sharp corners, pristine factory tampos and original 5-spoke racing wheels.',
-            estimatedValueMinINR: 399,
-            estimatedValueMaxINR: 650,
-            valueExplanation: 'Japanese Domestic Market (JDM) castings like the GT-R R34 carry premium secondary market liquidity among die-cast collectors. Clean carded examples routinely trade at 2x-3x standard retail.',
-            collectorTip: 'Look closely at the rear base stamp and wheel chrome. Carded variants with unspun rivets or error cards can fetch upwards of ₹2,500+ among specialized enthusiasts.',
-            confidenceLevel: 'High (Estimated based on visual die-cast database)',
-          }
+          elapsedMs: Date.now() - scanStartTime,
         });
       }
 
@@ -247,51 +255,63 @@ async function startServer() {
         },
       });
 
-      const prompt = `You are the chief Hot Wheels & die-cast valuation appraiser for Redline Garage India.
-Carefully examine this photo of a toy scale die-cast car (carded in blister packaging or loose).
+      const prompt = `You are the master die-cast appraiser, pricing analyst, and casting historian for Redline Garage India.
+Perform a comprehensive, realistic secondary market valuation for this 1:64 scale die-cast model in the Indian collector market (INR ₹).
 
-CRITICAL RARITY & VARIANT INSPECTION CRITERIA:
-1. Super Treasure Hunt ($TH / STH):
-   - Paint: Spectraflame candy/metallic deep translucent finish (distinct from flat enamel).
-   - Wheels: Real Riders 2-piece authentic rubber tires with custom detailed rims.
-   - Markings: "TH" monogram tampo on the body; Gold circle flame icon printed on the blister card behind the car.
-   - Valuation in India: Typically ₹2,500 to ₹15,000+ depending on casting (e.g., Datsun 510, R34, Porsche 911, Audi R8).
-2. Regular Treasure Hunt (TH):
-   - Markings: Circle Flame logo (flame inside a circle) printed on the car body; Silver circle flame icon behind blister on card.
-   - Valuation in India: ₹499 to ₹1,800.
-3. Red Line Club (RLC) / Convention / NFT Garage / Elite 64:
-   - Features: High-spec acrylic display case, numbered hologram seal, opening parts (hood/doors), mirrored chrome spectraflame.
-   - Valuation in India: ₹3,500 to ₹25,000+.
-4. Car Culture / Boulevard / Premium Lines:
-   - Features: Metal/Metal chassis & body, Real Riders rubber wheels, premium card art.
-   - Valuation in India: ₹799 to ₹3,500.
-5. Vintage Redline Era (1968-1977) & Blackwall Era (1977-1995):
-   - Features: Red stripe on tire sidewalls (Redlines), USA/Hong Kong metal base, classic vintage casting.
-   - Valuation in India: ₹2,500 to ₹35,000+ depending on condition.
-6. Mainline Common / JDM Favorites:
-   - Standard plastic wheels, mainline blue card. Common fantasy castings trade at ₹179–₹249; hyped JDM/Euro castings (Civic, Skyline, Silvia, 911 GT3) trade at ₹299–₹699.
-7. Errors & Factory Packaging Variants:
-   - Unspun rivets, missing tampos, upside-down packaging carded errors can command ₹1,500–₹5,000+ among niche collectors.
+USER INPUT DETAILS:
+- Brand Specified: ${brand || 'Hot Wheels / Diecast'}
+- Model Name / Description: ${modelName ? `"${modelName}"` : 'Identified from photo'}
+- Stated Condition: "${condition}"
+- Additional Notes: "${notes || 'None'}"
+${hasImage ? `- Image Hash: ${imageHash}` : '- Text-only valuation mode'}
+
+VALUATION KNOWLEDGE & BENCHMARKS (INDIAN SECONDARY MARKET IN INR ₹):
+1. Hot Wheels Mainlines:
+   - Common Fantasy / Regular mainlines: ₹179 – ₹249
+   - In-demand JDM (Skyline, Silvia, Supra, Civic, RX-7, Datsun), Porsche, Audi, BMW, Supercars: ₹299 – ₹799
+   - Regular Treasure Hunt (TH): ₹499 – ₹1,500
+   - Super Treasure Hunt ($TH / STH) with Spectraflame paint & Real Riders: ₹2,500 – ₹14,000+
+   - Red Line Club (RLC) / Elite 64 / Convention Exclusives: ₹3,500 – ₹25,000+
+   - Vintage Original Redlines (1968-1977): ₹2,500 – ₹30,000+
+2. Hot Wheels Premium (Car Culture, Boulevard, Team Transport, Fast & Furious):
+   - Regular Premiums: ₹799 – ₹1,800
+   - Chase / Hyped Premiums (0/5 black chase, LBWK, Team Transport): ₹1,800 – ₹6,500+
+3. Mini GT (1:64 Collector Grade):
+   - Standard releases: ₹1,199 – ₹1,899
+   - Blister / Chase / Limited Editions (Kaido House, LBWK, MiJo Exclusives): ₹2,200 – ₹6,000+
+4. Majorette:
+   - Street / Premium Cars: ₹249 – ₹499
+   - Deluxe / Vintage / Limited Edition (opening parts, metal suspension, collector box): ₹599 – ₹1,499
+5. CCA / Inno64 / Pop Race / Tarmac Works / Kaido House:
+   - Standard 1:64: ₹1,499 – ₹3,500
+   - Limited Special Liveries & Event Exclusives: ₹3,000 – ₹8,000+
+
+CONDITION ADJUSTMENT FACTOR:
+- Mint on Card (Carded) / Sealed in Box: 100% of fair market value
+- Loose (Near Mint / Flawless): ~60% – 75% of carded value for mainlines, ~80% for premiums/Mini GT
+- Loose (Playwear / Scratched): ~30% – 50% of carded value
+
+${hasImage ? `NON-DIECAST CHECK: If the photo is clearly NOT a die-cast scale model or Hot Wheels collectible (e.g. real full-size vehicle, pet, human face, furniture, food), set "isHotWheelsOrDiecast": false, set values to 0, describe what you see, and advise photographing a die-cast car.` : ''}
 
 OUTPUT FORMAT:
-Return ONLY a pure valid JSON object (no markdown code fences if possible) matching this schema:
+Return ONLY a pure valid JSON object matching this schema:
 {
-  "isHotWheelsOrDiecast": true or false,
-  "carModelName": "Accurate car make & model name (e.g. ''71 Datsun 510 Wagon ($TH)', 'Nissan Skyline GT-R BNR34', '1982 Toyota Supra')",
-  "seriesAndYear": "Estimated series and release year (e.g. '2024 HW J-Imports / Super Treasure Hunt #189/250', '2023 Car Culture: Ronin Run', '1968 Sweet 16 Original')",
-  "categoryType": "One of: 'Super Treasure Hunt ($TH)', 'Treasure Hunt (TH)', 'Red Line Club (RLC) / Exclusive', 'Premium / Real Riders', 'Vintage / Redline Classic', 'Mainline (High-Demand JDM/Euro)', 'Mainline (Standard)'",
-  "conditionAssessment": "Specific observations on card condition (e.g. 'Pristine Mint on Card (MOC) with sharp unbent corners and clear blister', 'Loose with minor paint chipping on roofline', etc.)",
-  "estimatedValueMinINR": number (Minimum estimated fair collector market value in INR, e.g. 3500),
-  "estimatedValueMaxINR": number (Maximum estimated fair collector market value in INR, e.g. 7000),
-  "valueExplanation": "2-3 comprehensive sentences explaining specifically WHY this car is valued at this price. If it is a $TH, TH, RLC, or Premium, cite the specific indicators (e.g. 'Identified as a Super Treasure Hunt based on the spectraflame finish and rubber Real Riders tires — these typically resell for ₹X–₹Y due to limited production'). If it is a standard mainline, explain its availability and popularity.",
-  "collectorTip": "1 piece of actionable collector advice (e.g. storage recommendation, protecto-pack advice, or historical trivia about the designer)",
+  "isHotWheelsOrDiecast": true,
+  "carModelName": "Exact Make, Model, and Casting Name (e.g. '1971 Datsun 510 Wagon ($TH)', 'Nissan Skyline GT-R R34', 'Porsche 911 GT3 RS', 'Mini GT LB-Silhouette WORKS GT Nissan 35GT-RR')",
+  "brand": "${brand || 'Hot Wheels'}",
+  "seriesAndYear": "Estimated release series and year (e.g. '2024 HW J-Imports Super Treasure Hunt', '2023 Car Culture: Canyon Warriors', 'Mini GT #482 LBWK', '2022 Factory Fresh')",
+  "categoryType": "One of: 'Super Treasure Hunt ($TH)', 'Treasure Hunt (TH)', 'Red Line Club (RLC) / Exclusive', 'Premium / Real Riders', 'Mini GT Collector Grade', 'Majorette Deluxe / Vintage', 'CCA / Special Edition', 'Mainline (High-Demand JDM/Euro)', 'Mainline (Standard)'",
+  "conditionAssessment": "Clear condition assessment taking into account '${condition}'",
+  "estimatedValueMinINR": number (Minimum estimated fair market value in INR, e.g. 450),
+  "estimatedValueMaxINR": number (Maximum estimated fair market value in INR, e.g. 850),
+  "reasoningTags": ["Tag 1", "Tag 2", "Tag 3"] (e.g. ['High Collector Demand', 'Rare Casting', 'Spectraflame Paint', 'Discontinued Series', 'Real Riders Rubber Tires']),
+  "valueExplanation": "2-3 comprehensive sentences citing the specific casting details, rarity tier, collector demand, and secondary Indian market trends justifying the valuation.",
+  "collectorTip": "1 actionable collector tip or casting trivia specific to this car.",
   "confidenceLevel": "'High', 'Medium', or 'Low'"
-}
+}`;
 
-If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrDiecast': false with a helpful explanation in 'valueExplanation'.`;
-
-      // Model cascade with active, supported Gemini vision models
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+      // Cascade with Gemini models (gemini-3.7-flash first, then gemini-flash-latest, then gemini-3.1-flash-lite)
+      const modelsToTry = ['gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
       let lastErr: any = null;
       let lastErrMessage = '';
       let parsedData: any = null;
@@ -302,31 +322,35 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
       for (const modelName of modelsToTry) {
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
-            console.log(`[ValueScanner Server Diagnostic] Invoking vision model: ${modelName} (attempt ${attempt}/2, image payload length: ${rawBase64.length})`);
+            console.log(`[ValueScanner Server Diagnostic #${scanId}] Invoking model: ${modelName} (attempt ${attempt}/2)`);
             const attemptStart = Date.now();
+
+            const contentsParts: any[] = [];
+            if (hasImage) {
+              contentsParts.push({
+                inlineData: {
+                  data: rawBase64,
+                  mimeType: resolvedMimeType || 'image/jpeg',
+                },
+              });
+            }
+            contentsParts.push({
+              text: prompt,
+            });
 
             const response = await ai.models.generateContent({
               model: modelName,
               contents: {
-                parts: [
-                  {
-                    inlineData: {
-                      data: rawBase64,
-                      mimeType: resolvedMimeType || 'image/jpeg',
-                    },
-                  },
-                  {
-                    text: prompt,
-                  },
-                ],
+                parts: contentsParts,
               },
               config: {
                 responseMimeType: 'application/json',
+                temperature: 0.1,
               },
             });
 
             const elapsed = Date.now() - attemptStart;
-            console.log(`[ValueScanner Server Diagnostic] ${modelName} responded in ${elapsed}ms. Response text length: ${response.text?.length || 0}`);
+            console.log(`[ValueScanner Server Diagnostic #${scanId}] ${modelName} responded in ${elapsed}ms. Response text length: ${response.text?.length || 0}`);
 
             if (response.text) {
               try {
@@ -336,7 +360,7 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
                 } else if (cleanText.includes('```')) {
                   cleanText = cleanText.replace(/```/g, '').trim();
                 }
-                
+
                 // If text contains JSON embedded in commentary
                 const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
@@ -346,11 +370,11 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
                 parsedData = JSON.parse(cleanText);
                 if (parsedData && typeof parsedData === 'object') {
                   modelUsed = modelName;
-                  console.log(`[ValueScanner Server Diagnostic] SUCCESS: Parsed valuation payload using ${modelName} for "${parsedData.carModelName || 'Unknown'}" in ${Date.now() - scanStartTime}ms total.`);
+                  console.log(`[ValueScanner Server Diagnostic #${scanId}] SUCCESS: Model "${parsedData.carModelName || 'Unknown'}" identified via ${modelName} in ${Date.now() - scanStartTime}ms total.`);
                   break; // Successfully got and parsed the model output!
                 }
               } catch (parseErr: any) {
-                console.warn(`[ValueScanner Server Diagnostic] JSON parse warning on ${modelName} (attempt ${attempt}): ${parseErr?.message}`);
+                console.warn(`[ValueScanner Server Diagnostic #${scanId}] JSON parse warning on ${modelName} (attempt ${attempt}): ${parseErr?.message}`);
               }
             }
           } catch (callErr: any) {
@@ -362,10 +386,10 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
             const isBusy = errMsg.includes('503') || errMsg.includes('unavailable') || errMsg.includes('high demand') || errMsg.includes('overloaded');
             const isTimeout = errMsg.includes('timeout') || errMsg.includes('deadline_exceeded') || errMsg.includes('etimedout');
 
-            console.error(`[ValueScanner Server Diagnostic] ERROR on model "${modelName}" (attempt ${attempt}/2): ${lastErrMessage}`);
+            console.error(`[ValueScanner Server Diagnostic #${scanId}] ERROR on model "${modelName}" (attempt ${attempt}/2): ${lastErrMessage}`);
 
             if (isQuota) {
-              console.error(`[ValueScanner Server Diagnostic] RATE LIMIT NOTICE: Quota reached for model ${modelName}. Note: Shared quota across Chatbot, Card Stylizer, and Scanner may contribute to RPM/TPM limits.`);
+              console.error(`[ValueScanner Server Diagnostic #${scanId}] RATE LIMIT NOTICE: Quota reached for model ${modelName}.`);
             }
 
             if (isDeprecatedOrNotFound) {
@@ -373,7 +397,7 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
             }
 
             if ((isQuota || isBusy || isTimeout) && attempt < 2) {
-              console.log(`[ValueScanner Server Diagnostic] Backing off 800ms before retry on ${modelName}...`);
+              console.log(`[ValueScanner Server Diagnostic #${scanId}] Backing off 800ms before retry on ${modelName}...`);
               await delay(800);
             } else {
               break; // Try next model in cascade
@@ -387,7 +411,7 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
       }
 
       if (!parsedData) {
-        console.error(`[ValueScanner Server Diagnostic] ALL MODELS FAILED in cascade (${modelsToTry.join(', ')}). Total elapsed: ${Date.now() - scanStartTime}ms. Last error: ${lastErrMessage}`);
+        console.error(`[ValueScanner Server Diagnostic #${scanId}] ALL MODELS FAILED in cascade (${modelsToTry.join(', ')}). Total elapsed: ${Date.now() - scanStartTime}ms. Last error: ${lastErrMessage}`);
         const errMsgLower = lastErrMessage.toLowerCase();
         const isQuota = errMsgLower.includes('429') || errMsgLower.includes('quota') || errMsgLower.includes('resource_exhausted') || errMsgLower.includes('rate limit');
         const isBusy = errMsgLower.includes('503') || errMsgLower.includes('unavailable') || errMsgLower.includes('high demand') || errMsgLower.includes('overloaded');
@@ -397,7 +421,7 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
           return res.status(429).json({
             success: false,
             errorType: 'quota_exceeded',
-            error: 'Scanner is temporarily at capacity (Gemini API quota reached). Please try again in a few moments or check shared API key quota.',
+            error: 'Scanner is temporarily at capacity (Gemini API quota reached). Please try again in a few moments.',
             rawError: lastErrMessage,
             isApiKeyConfigured: true,
             apiKeySource,
@@ -421,7 +445,7 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
           return res.status(503).json({
             success: false,
             errorType: 'service_busy',
-            error: 'Gemini AI service is currently experiencing high traffic. Please tap "Retry Scan Now" in a few seconds.',
+            error: 'Gemini AI service is currently experiencing high traffic. Please tap "Retry Scan" in a few seconds.',
             rawError: lastErrMessage,
             isApiKeyConfigured: true,
             apiKeySource,
@@ -447,11 +471,12 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
         isApiKeyConfigured: true,
         apiKeySource,
         modelUsed,
+        imageHash,
         elapsedMs: Date.now() - scanStartTime,
         data: parsedData,
       });
     } catch (err: any) {
-      console.error('[ValueScanner Server Diagnostic] Unexpected Top-Level Scanner Exception:', err);
+      console.error(`[ValueScanner Server Diagnostic #${scanId}] Unexpected Top-Level Scanner Exception:`, err);
       const errMsg = (err?.message || '').toLowerCase();
       const isQuota = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('resource_exhausted');
       const isBusy = errMsg.includes('503') || errMsg.includes('unavailable') || errMsg.includes('high demand') || errMsg.includes('overloaded');
@@ -474,7 +499,11 @@ If the image is not a die-cast car or completely unreadable, set 'isHotWheelsOrD
         elapsedMs: Date.now() - scanStartTime,
       });
     }
-  });
+  };
+
+  // Register scanner handler on both endpoints for full compatibility
+  app.post('/api/gemini/scan-hotwheels', handleHotWheelsScan);
+  app.post('/api/scan-car', handleHotWheelsScan);
 
   // Server-side Gemini API route for "AI-Powered Payment Screenshot Verification"
   app.post('/api/gemini/verify-payment-screenshot', async (req, res) => {
@@ -1154,6 +1183,439 @@ Keep answers concise, well-structured, energetic, and formatted cleanly with mar
       count: serverSubscribers.length,
       subscribers: serverSubscribers,
     });
+  });
+
+  // ========================================================================
+  // COLLECTIONS & PRODUCT COLLECTIONS BACKEND REST API
+  // ========================================================================
+
+  const serverSupabaseUrl =
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://bmuccamypbfrrhealjgq.supabase.co';
+  const serverSupabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtdWNjYW15cGJmcnJoZWFsamdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTA4MzcsImV4cCI6MjEwMjUyNjgzN30.l50pEP6iS4oeKMAq030YQi9s3Qg2QhPJIYuWI57-9rU';
+
+  const supabaseServerClient = createClient(serverSupabaseUrl, serverSupabaseKey);
+
+  // 1. GET /api/collections - List all collections with product counts & mappings
+  app.get('/api/collections', async (req, res) => {
+    try {
+      // Get junction table counts
+      const { data: pcData } = await supabaseServerClient
+        .from('product_collections')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      const prodMap: Record<string, string[]> = {};
+      if (pcData) {
+        pcData.forEach((pc: any) => {
+          const colId = pc.collection_id;
+          if (!prodMap[colId]) prodMap[colId] = [];
+          if (!prodMap[colId].includes(pc.product_id)) prodMap[colId].push(pc.product_id);
+        });
+      }
+
+      // Fetch from collections table
+      const { data: cols, error: colsErr } = await supabaseServerClient
+        .from('collections')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (colsErr || !cols || cols.length === 0) {
+        // Fallback to categories table
+        const { data: cats } = await supabaseServerClient
+          .from('categories')
+          .select('*')
+          .order('sort_order', { ascending: true });
+
+        const mapped = (cats || []).map((cat: any) => {
+          const id = cat.id;
+          const isChild = id === 'bouquets' || id === 'custom-cards' || id === 'frames';
+          return {
+            id,
+            name: cat.name,
+            slug: id,
+            description: cat.tagline || '',
+            tagline: cat.tagline || '',
+            coverImageUrl: cat.image || '',
+            cover_image_url: cat.image || '',
+            image: cat.image || '',
+            displayOrder: cat.sort_order || 0,
+            display_order: cat.sort_order || 0,
+            active: true,
+            parentId: isChild ? 'hot-wheels-customize' : null,
+            parent_id: isChild ? 'hot-wheels-customize' : null,
+            badge: cat.badge || '',
+            icon: cat.icon || 'Car',
+            productCount: prodMap[id]?.length || 0,
+            product_count: prodMap[id]?.length || 0,
+            productIds: prodMap[id] || [],
+          };
+        });
+
+        return res.json({ success: true, collections: mapped, source: 'categories_fallback' });
+      }
+
+      const formatted = cols.map((col: any) => ({
+        id: col.id,
+        name: col.name,
+        slug: col.slug || col.id,
+        description: col.description || col.tagline || '',
+        tagline: col.tagline || col.description || '',
+        coverImageUrl: col.cover_image_url || col.image || '',
+        cover_image_url: col.cover_image_url || col.image || '',
+        image: col.cover_image_url || col.image || '',
+        displayOrder: col.display_order ?? 0,
+        display_order: col.display_order ?? 0,
+        active: col.active !== undefined ? Boolean(col.active) : true,
+        parentId: col.parent_id || null,
+        parent_id: col.parent_id || null,
+        badge: col.badge || '',
+        icon: col.icon || 'Car',
+        productCount: prodMap[col.id]?.length || 0,
+        product_count: prodMap[col.id]?.length || 0,
+        productIds: prodMap[col.id] || [],
+        createdAt: col.created_at,
+        created_at: col.created_at,
+        updatedAt: col.updated_at,
+        updated_at: col.updated_at,
+      }));
+
+      return res.json({ success: true, collections: formatted, source: 'collections' });
+    } catch (err: any) {
+      console.error('Server error fetching collections:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 2. POST /api/collections - Create new collection
+  app.post('/api/collections', async (req, res) => {
+    try {
+      const body = req.body;
+      if (!body.name || !body.name.trim()) {
+        return res.status(400).json({ success: false, error: 'Collection name is required.' });
+      }
+
+      const cleanSlug = (body.slug || body.id || body.name)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/^-+|-+$/g, '') || `col-${Date.now()}`;
+
+      const now = new Date().toISOString();
+      const payload = {
+        id: cleanSlug,
+        name: body.name.trim(),
+        slug: cleanSlug,
+        description: body.description?.trim() || body.tagline?.trim() || '',
+        tagline: body.tagline?.trim() || body.description?.trim() || '',
+        cover_image_url: body.coverImageUrl || body.image || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
+        display_order: body.displayOrder !== undefined ? Number(body.displayOrder) : 99,
+        active: body.active !== undefined ? Boolean(body.active) : true,
+        parent_id: body.parentId || body.parent_id || null,
+        badge: body.badge?.trim() || '',
+        icon: body.icon || 'Car',
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Write to collections
+      await supabaseServerClient.from('collections').upsert([payload]);
+
+      // Dual write to categories
+      await supabaseServerClient.from('categories').upsert([
+        {
+          id: cleanSlug,
+          name: payload.name,
+          tagline: payload.description,
+          icon: payload.icon,
+          image: payload.cover_image_url,
+          badge: payload.badge,
+          sort_order: payload.display_order,
+        },
+      ]);
+
+      return res.status(201).json({ success: true, collection: payload });
+    } catch (err: any) {
+      console.error('Server error creating collection:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 3. PUT /api/collections/:id - Update existing collection
+  app.put('/api/collections/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const now = new Date().toISOString();
+
+      const dbUpdates: Record<string, any> = { updated_at: now };
+      if (updates.name !== undefined) dbUpdates.name = updates.name.trim();
+      if (updates.slug !== undefined) dbUpdates.slug = updates.slug.trim().toLowerCase();
+      if (updates.description !== undefined) {
+        dbUpdates.description = updates.description.trim();
+        dbUpdates.tagline = updates.description.trim();
+      }
+      if (updates.tagline !== undefined) {
+        dbUpdates.tagline = updates.tagline.trim();
+        dbUpdates.description = updates.tagline.trim();
+      }
+      if (updates.coverImageUrl !== undefined || updates.cover_image_url !== undefined || updates.image !== undefined) {
+        const img = updates.coverImageUrl || updates.cover_image_url || updates.image;
+        dbUpdates.cover_image_url = img;
+      }
+      if (updates.displayOrder !== undefined || updates.display_order !== undefined) {
+        dbUpdates.display_order = Number(updates.displayOrder ?? updates.display_order);
+      }
+      if (updates.active !== undefined) dbUpdates.active = Boolean(updates.active);
+      if (updates.parentId !== undefined || updates.parent_id !== undefined) {
+        dbUpdates.parent_id = updates.parentId ?? updates.parent_id;
+      }
+      if (updates.badge !== undefined) dbUpdates.badge = updates.badge;
+      if (updates.icon !== undefined) dbUpdates.icon = updates.icon;
+
+      await supabaseServerClient.from('collections').update(dbUpdates).eq('id', id);
+
+      // Sync categories
+      const catUpdates: Record<string, any> = {};
+      if (dbUpdates.name) catUpdates.name = dbUpdates.name;
+      if (dbUpdates.description) catUpdates.tagline = dbUpdates.description;
+      if (dbUpdates.cover_image_url) catUpdates.image = dbUpdates.cover_image_url;
+      if (dbUpdates.badge !== undefined) catUpdates.badge = dbUpdates.badge;
+      if (dbUpdates.icon) catUpdates.icon = dbUpdates.icon;
+      if (dbUpdates.display_order !== undefined) catUpdates.sort_order = dbUpdates.display_order;
+
+      if (Object.keys(catUpdates).length > 0) {
+        await supabaseServerClient.from('categories').update(catUpdates).eq('id', id);
+      }
+
+      return res.json({ success: true, updated: dbUpdates });
+    } catch (err: any) {
+      console.error('Server error updating collection:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 4. DELETE /api/collections/:id - Delete collection & cascaded junction rows
+  app.delete('/api/collections/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await supabaseServerClient.from('product_collections').delete().eq('collection_id', id);
+      await supabaseServerClient.from('collections').delete().eq('id', id);
+      await supabaseServerClient.from('categories').delete().eq('id', id);
+
+      return res.json({ success: true, message: `Collection ${id} removed.` });
+    } catch (err: any) {
+      console.error('Server error deleting collection:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 5. POST /api/collections/reorder - Reorder display order of collections
+  app.post('/api/collections/reorder', async (req, res) => {
+    try {
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ success: false, error: 'orderedIds array required' });
+      }
+
+      for (let i = 0; i < orderedIds.length; i++) {
+        const colId = orderedIds[i];
+        const displayOrder = i + 1;
+        await supabaseServerClient.from('collections').update({ display_order: displayOrder }).eq('id', colId);
+        await supabaseServerClient.from('categories').update({ sort_order: displayOrder }).eq('id', colId);
+      }
+
+      return res.json({ success: true, message: 'Collections reordered successfully.' });
+    } catch (err: any) {
+      console.error('Server error reordering collections:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 6. GET /api/product-collections - Get all product_collections junction entries
+  app.get('/api/product-collections', async (req, res) => {
+    try {
+      const { collectionId, productId } = req.query;
+      let query = supabaseServerClient.from('product_collections').select('*').order('display_order', { ascending: true });
+
+      if (collectionId) {
+        query = query.eq('collection_id', String(collectionId));
+      }
+      if (productId) {
+        query = query.eq('product_id', String(productId));
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        return res.json({ success: true, productCollections: [] });
+      }
+
+      return res.json({ success: true, productCollections: data || [] });
+    } catch (err: any) {
+      console.error('Server error fetching product collections:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 7. POST /api/collections/:id/products - Assign product to collection
+  app.post('/api/collections/:id/products', async (req, res) => {
+    try {
+      const { id: collectionId } = req.params;
+      const { productId, displayOrder } = req.body;
+
+      if (!productId) {
+        return res.status(400).json({ success: false, error: 'productId is required' });
+      }
+
+      const cleanProdId = String(productId).trim();
+      const cleanColId = String(collectionId).trim();
+
+      let orderPos = displayOrder;
+      if (orderPos === undefined) {
+        const { data: existing } = await supabaseServerClient
+          .from('product_collections')
+          .select('id')
+          .eq('collection_id', cleanColId);
+        orderPos = (existing?.length || 0) + 1;
+      }
+
+      const recordId = `pc_${cleanProdId}_${cleanColId}`;
+      await supabaseServerClient.from('product_collections').upsert([
+        {
+          id: recordId,
+          product_id: cleanProdId,
+          collection_id: cleanColId,
+          display_order: orderPos,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      // Sync products table
+      const { data: prodData } = await supabaseServerClient.from('products').select('*').eq('id', cleanProdId).single();
+      if (prodData) {
+        const currentIds: string[] = Array.isArray(prodData.collection_ids)
+          ? prodData.collection_ids
+          : [prodData.collection_id || prodData.category || 'scale-model-diecast'];
+        if (!currentIds.includes(cleanColId)) currentIds.push(cleanColId);
+        await supabaseServerClient
+          .from('products')
+          .update({ collection_id: prodData.collection_id || cleanColId, collection_ids: currentIds })
+          .eq('id', cleanProdId);
+      }
+
+      return res.json({ success: true, message: `Product ${cleanProdId} assigned to collection ${cleanColId}` });
+    } catch (err: any) {
+      console.error('Server error assigning product to collection:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 8. DELETE /api/collections/:id/products/:productId - Remove product from collection
+  app.delete('/api/collections/:id/products/:productId', async (req, res) => {
+    try {
+      const { id: collectionId, productId } = req.params;
+      const cleanProdId = String(productId).trim();
+      const cleanColId = String(collectionId).trim();
+
+      await supabaseServerClient
+        .from('product_collections')
+        .delete()
+        .eq('collection_id', cleanColId)
+        .eq('product_id', cleanProdId);
+
+      // Sync products table
+      const { data: prodData } = await supabaseServerClient.from('products').select('*').eq('id', cleanProdId).single();
+      if (prodData) {
+        const currentIds: string[] = (
+          Array.isArray(prodData.collection_ids) ? prodData.collection_ids : [prodData.collection_id || prodData.category]
+        ).filter((c: string) => c !== cleanColId);
+        const nextPrimary = currentIds.length > 0 ? currentIds[0] : prodData.category || 'scale-model-diecast';
+        await supabaseServerClient
+          .from('products')
+          .update({ collection_id: nextPrimary, collection_ids: currentIds })
+          .eq('id', cleanProdId);
+      }
+
+      return res.json({ success: true, message: `Product ${cleanProdId} removed from collection ${cleanColId}` });
+    } catch (err: any) {
+      console.error('Server error removing product from collection:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 9. PUT /api/collections/:id/products/reorder - Reorder products in a collection
+  app.put('/api/collections/:id/products/reorder', async (req, res) => {
+    try {
+      const { id: collectionId } = req.params;
+      const { orderedProductIds } = req.body;
+
+      if (!Array.isArray(orderedProductIds)) {
+        return res.status(400).json({ success: false, error: 'orderedProductIds array required' });
+      }
+
+      for (let i = 0; i < orderedProductIds.length; i++) {
+        const pId = orderedProductIds[i];
+        const displayOrder = i + 1;
+        await supabaseServerClient
+          .from('product_collections')
+          .update({ display_order: displayOrder })
+          .eq('collection_id', collectionId)
+          .eq('product_id', pId);
+      }
+
+      return res.json({ success: true, message: `Products in collection ${collectionId} reordered successfully.` });
+    } catch (err: any) {
+      console.error('Server error reordering collection products:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
+  });
+
+  // 10. PUT /api/products/:productId/collections - Update all collection assignments for product
+  app.put('/api/products/:productId/collections', async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const { collectionIds } = req.body;
+
+      if (!Array.isArray(collectionIds)) {
+        return res.status(400).json({ success: false, error: 'collectionIds array required' });
+      }
+
+      const cleanProdId = String(productId).trim();
+      const cleanColIds = Array.from(new Set(collectionIds.map((c: string) => String(c).trim()).filter(Boolean)));
+
+      // Delete old junction rows
+      await supabaseServerClient.from('product_collections').delete().eq('product_id', cleanProdId);
+
+      // Insert new junction rows
+      if (cleanColIds.length > 0) {
+        const now = new Date().toISOString();
+        const records = cleanColIds.map((colId, index) => ({
+          id: `pc_${cleanProdId}_${colId}`,
+          product_id: cleanProdId,
+          collection_id: colId,
+          display_order: index + 1,
+          created_at: now,
+        }));
+        await supabaseServerClient.from('product_collections').upsert(records);
+      }
+
+      // Sync products table
+      const primaryCol = cleanColIds.length > 0 ? cleanColIds[0] : 'scale-model-diecast';
+      await supabaseServerClient
+        .from('products')
+        .update({ collection_id: primaryCol, collection_ids: cleanColIds })
+        .eq('id', cleanProdId);
+
+      return res.json({ success: true, collectionIds: cleanColIds });
+    } catch (err: any) {
+      console.error('Server error updating product collections:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    }
   });
 
   // Dynamic /sitemap.xml Generation Endpoint

@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Car } from 'lucide-react';
 import {
   getOptimizedImageUrl,
   buildResponsiveSrcSet,
-  getBlurPlaceholderUrl,
+  DEFAULT_FALLBACK_IMAGE,
 } from '../utils/imageOptimizer';
 
 interface ResponsiveImageProps {
-  src: string;
-  alt: string;
+  src?: string | null;
+  alt?: string;
   className?: string;
   containerClassName?: string;
   aspectRatio?: '4/3' | '1/1' | '16/9' | '3/4' | 'auto';
   priority?: boolean;
   sizes?: string;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   fallbackSrc?: string;
   objectFit?: 'cover' | 'contain';
 }
@@ -23,26 +24,57 @@ interface ResponsiveImageProps {
  * 
  * Features:
  * 1. Automatic WebP/AVIF format auto-negotiation via CDN
- * 2. Mobile vs. Desktop responsive srcset downscaling (avoids downloading 4000px files)
+ * 2. Mobile vs. Desktop responsive srcset downscaling
  * 3. Priority flag for above-the-fold Hero items (fetchpriority="high", loading="eager")
  * 4. Below-the-fold native browser lazy loading (loading="lazy", decoding="async")
- * 5. Lightweight blur-up placeholder & skeleton prevents Cumulative Layout Shift (CLS)
- * 6. Error handling with fallback asset
+ * 5. Robust container layout (w-full h-full flex items-center justify-center) prevents collapse
+ * 6. Instant cache hydration check on mount prevents stuck opacity-0
+ * 7. Graceful placeholder fallback if URL is missing or fails
  */
 export const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
   src,
-  alt,
-  className = 'w-full h-full object-cover',
+  alt = 'Redline Garage Hot Wheels Collectible',
+  className = 'w-full h-full object-contain',
   containerClassName = '',
-  aspectRatio = '4/3',
+  aspectRatio = 'auto',
   priority = false,
   sizes = '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw',
   onClick,
-  fallbackSrc = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75',
-  objectFit = 'cover',
+  fallbackSrc = DEFAULT_FALLBACK_IMAGE,
+  objectFit = 'contain',
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
+  const [hasPrimaryError, setHasPrimaryError] = useState(false);
+  const [hasFallbackError, setHasFallbackError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  // Clean and sanitize incoming src
+  const rawSrc = src && typeof src === 'string' && src.trim().length > 0 ? src.trim() : null;
+  const targetSrc = hasPrimaryError ? fallbackSrc : (rawSrc || fallbackSrc);
+  const isCompletelyBroken = hasFallbackError || (!rawSrc && !fallbackSrc);
+
+  const optimizedSrc = getOptimizedImageUrl(targetSrc, {
+    width: priority ? 800 : 640,
+    quality: priority ? 80 : 75,
+    format: 'auto',
+    fit: objectFit === 'contain' ? 'contain' : 'cover',
+  });
+
+  const srcSet = (!hasPrimaryError && rawSrc) ? buildResponsiveSrcSet(targetSrc) : undefined;
+
+  // Reset error & load state when incoming source prop changes
+  useEffect(() => {
+    setHasPrimaryError(false);
+    setHasFallbackError(false);
+    setIsLoaded(false);
+  }, [src]);
+
+  // Handle cached images that might have finished loading before React event listener attached
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    }
+  }, [optimizedSrc]);
 
   const aspectClass =
     aspectRatio === '4/3'
@@ -55,59 +87,62 @@ export const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
       ? 'aspect-3/4'
       : '';
 
-  const rawSrc = hasError ? fallbackSrc : src;
-  const optimizedSrc = getOptimizedImageUrl(rawSrc, {
-    width: priority ? 800 : 640,
-    quality: priority ? 80 : 75,
-    format: 'auto',
-    fit: objectFit === 'contain' ? 'contain' : 'crop',
-  });
-  const srcSet = hasError ? undefined : buildResponsiveSrcSet(rawSrc);
-  const blurUrl = !hasError && !priority ? getBlurPlaceholderUrl(rawSrc) : undefined;
+  const handleImageError = () => {
+    if (!hasPrimaryError && rawSrc && rawSrc !== fallbackSrc) {
+      // Primary failed, fall back to fallback image
+      setHasPrimaryError(true);
+      setIsLoaded(false);
+    } else {
+      // Fallback also failed or no source provided
+      setHasFallbackError(true);
+      setIsLoaded(true);
+    }
+  };
 
   return (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden bg-zinc-100 ${aspectClass} ${containerClassName}`}
+      className={`relative w-full h-full overflow-hidden flex items-center justify-center ${aspectClass} ${containerClassName}`}
     >
-      {/* 1. Low-Resolution Blur-Up Placeholder (instant visual preview without network penalty) */}
-      {blurUrl && !isLoaded && (
-        <img
-          src={blurUrl}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover filter blur-md scale-110 opacity-70 transition-opacity duration-300 pointer-events-none"
-        />
-      )}
-
-      {/* 2. Skeleton Shimmer Placeholder (Prevents Cumulative Layout Shift) */}
-      {!isLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-200 via-zinc-100 to-zinc-200 animate-pulse flex items-center justify-center pointer-events-none">
-          <div className="w-5 h-5 border-2 border-red-500/20 border-t-red-500 rounded-full animate-spin" />
+      {/* 1. Skeleton Placeholder */}
+      {!isLoaded && !isCompletelyBroken && (
+        <div className="absolute inset-0 bg-zinc-100/90 animate-pulse flex items-center justify-center pointer-events-none z-0">
+          <div className="w-5 h-5 border-2 border-zinc-300 border-t-red-500 rounded-full animate-spin" />
         </div>
       )}
 
-      {/* 3. Fully Optimized Modern Image */}
-      <img
-        src={optimizedSrc}
-        srcSet={srcSet}
-        sizes={sizes}
-        alt={alt || 'Redline Garage Hot Wheels Collectible'}
-        loading={priority ? 'eager' : 'lazy'}
-        decoding="async"
-        fetchPriority={priority ? 'high' : 'low'}
-        referrerPolicy="no-referrer"
-        onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          if (!hasError) {
-            setHasError(true);
-          }
-          setIsLoaded(true);
-        }}
-        className={`${className} transition-all duration-300 ${
-          isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-98'
-        }`}
-      />
+      {/* 2. Branded Graceful Fallback if image genuinely unavailable or broken */}
+      {isCompletelyBroken ? (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-100 text-zinc-400 p-4 select-none">
+          <div className="w-10 h-10 rounded-xl bg-zinc-200/80 flex items-center justify-center mb-1.5 text-zinc-500 shadow-inner">
+            <Car className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-700">
+            Redline Garage
+          </span>
+          <span className="text-[9px] font-mono text-zinc-400">
+            Official Die-Cast
+          </span>
+        </div>
+      ) : (
+        /* 3. Fully Optimized Modern Image */
+        <img
+          ref={imgRef}
+          src={optimizedSrc}
+          srcSet={srcSet}
+          sizes={sizes}
+          alt={alt}
+          loading={priority ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={priority ? 'high' : 'auto'}
+          referrerPolicy="no-referrer"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleImageError}
+          className={`${className} transition-opacity duration-200 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      )}
     </div>
   );
 };

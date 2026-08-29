@@ -117,11 +117,12 @@ export const CollectorPicksSection: React.FC<CollectorPicksSectionProps> = ({
                 </button>
 
                 {/* Image */}
-                <div className="relative aspect-4/3 overflow-hidden bg-zinc-100 border-b border-zinc-100">
+                <div className="relative aspect-4/3 overflow-hidden bg-zinc-100 border-b border-zinc-100 flex items-center justify-center">
                   <ResponsiveImage
-                    src={product.image}
+                    src={product.image || product.imageUrl}
                     alt={product.name}
-                    aspectRatio="4/3"
+                    aspectRatio="auto"
+                    objectFit="cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 280px"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />

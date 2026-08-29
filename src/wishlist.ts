@@ -37,6 +37,8 @@ export const isProductWishlisted = (productId: string): boolean => {
   return ids.includes(productId);
 };
 
+export const isWishlisted = isProductWishlisted;
+
 export const toggleWishlistItem = async (
   productId: string,
   userProfile?: UserProfile | null
@@ -65,6 +67,8 @@ export const toggleWishlistItem = async (
 
   return isNowWishlisted;
 };
+
+export const toggleWishlist = toggleWishlistItem;
 
 export const subscribeToWishlist = (callback: WishlistListener): (() => void) => {
   listeners.add(callback);

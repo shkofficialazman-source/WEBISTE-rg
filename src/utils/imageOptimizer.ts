@@ -17,17 +17,22 @@ export interface ImageOptimizationOptions {
   fit?: 'crop' | 'cover' | 'contain' | 'inside';
 }
 
+export const DEFAULT_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=800&auto=format&fit=crop&q=80';
+
 /**
  * Optimizes an arbitrary image URL for fast mobile & desktop delivery.
  * Downscales 4000px+ originals into exact device dimensions (e.g. 480px, 800px)
  * and enables automatic WebP/AVIF compression with quality 75-80.
  */
 export function getOptimizedImageUrl(
-  url: string,
+  url?: string | null,
   options: ImageOptimizationOptions = {}
 ): string {
-  if (!url || typeof url !== 'string') return '';
-  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return DEFAULT_FALLBACK_IMAGE;
+  }
+  const cleanUrl = url.trim();
+  if (cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl;
 
   const {
     width = 640,
@@ -38,11 +43,13 @@ export function getOptimizedImageUrl(
 
   try {
     // 1. Unsplash CDN Optimization
-    if (url.includes('images.unsplash.com')) {
-      const baseUrl = url.split('?')[0];
+    if (cleanUrl.includes('images.unsplash.com')) {
+      const baseUrl = cleanUrl.split('?')[0];
       const params = new URLSearchParams();
       params.set('auto', format === 'auto' ? 'format' : format);
-      params.set('fit', fit);
+      // Unsplash supports 'crop', 'clip', 'max', 'fill', 'scale'
+      const unsplashFit = fit === 'contain' ? 'max' : (fit === 'cover' || fit === 'crop' ? 'crop' : 'max');
+      params.set('fit', unsplashFit);
       params.set('w', String(width));
       params.set('q', String(quality));
       if (options.height) {
@@ -51,19 +58,14 @@ export function getOptimizedImageUrl(
       return `${baseUrl}?${params.toString()}`;
     }
 
-    // 2. Supabase Storage Optimization (if Supabase image transformation is enabled or standard public CDN)
-    if (url.includes('supabase.co/storage/v1/object/public/')) {
-      // If render endpoint is supported, can transform /object/public/ -> /render/image/public/
-      // Otherwise append cache control & width query hints
-      if (url.includes('?')) {
-        return `${url}&width=${width}&quality=${quality}`;
-      }
-      return `${url}?width=${width}&quality=${quality}`;
+    // 2. Supabase Storage Optimization
+    if (cleanUrl.includes('supabase.co/storage/v1/object/public/')) {
+      return cleanUrl;
     }
 
     // 3. Cloudinary Optimization
-    if (url.includes('res.cloudinary.com')) {
-      const parts = url.split('/upload/');
+    if (cleanUrl.includes('res.cloudinary.com')) {
+      const parts = cleanUrl.split('/upload/');
       if (parts.length === 2) {
         const transforms = `f_auto,q_auto:good,w_${width},c_${fit === 'crop' ? 'fill' : 'scale'}`;
         return `${parts[0]}/upload/${transforms}/${parts[1]}`;
@@ -71,13 +73,13 @@ export function getOptimizedImageUrl(
     }
 
     // 4. ImgBB / PostImages or other CDNs with query params
-    if (url.includes('imgbb.com') || url.includes('postimg.cc')) {
-      return url;
+    if (cleanUrl.includes('imgbb.com') || cleanUrl.includes('postimg.cc')) {
+      return cleanUrl;
     }
 
-    return url;
+    return cleanUrl;
   } catch {
-    return url;
+    return cleanUrl;
   }
 }
 

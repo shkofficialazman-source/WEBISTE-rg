@@ -73,4 +73,6 @@ export const BRAND_NAME = BRAND_ASSETS.brandName;
 export const BRAND_TAGLINE = BRAND_ASSETS.tagline;
 export const BRAND_DOMAIN = BRAND_ASSETS.domain;
 export const BRAND_SITE_URL = BRAND_ASSETS.siteUrl;
+export const BRAND_WHATSAPP_NUMBER = BRAND_ASSETS.storeContact.whatsappNumber;
+export const BRAND_WHATSAPP_PHONE = BRAND_ASSETS.storeContact.whatsapp;
 export const BRAND_WHATSAPP_GROUP_URL = BRAND_ASSETS.storeContact.whatsappGroupUrl;

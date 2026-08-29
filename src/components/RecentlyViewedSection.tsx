@@ -82,9 +82,10 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
                 {/* Product Image */}
                 <div className="aspect-square bg-zinc-50 rounded-lg overflow-hidden flex items-center justify-center p-2 mb-2 border border-zinc-100 group-hover:scale-105 transition-transform duration-300">
                   <ResponsiveImage
-                    src={product.image}
+                    src={product.image || product.imageUrl}
                     alt={product.name}
-                    aspectRatio="1/1"
+                    aspectRatio="auto"
+                    objectFit="contain"
                     sizes="120px"
                     className="w-full h-full object-contain"
                   />

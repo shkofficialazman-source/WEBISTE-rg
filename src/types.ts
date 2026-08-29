@@ -1,16 +1,77 @@
-export type CategoryId = 'bouquets' | 'frames' | 'custom-cards' | 'scale-models' | string;
+export type CategoryId = 'bouquets' | 'frames' | 'custom-cards' | 'scale-models' | 'scale-model-diecast' | 'hot-wheels-customize' | string;
 
 export interface Category {
   id: CategoryId;
   name: string;
   tagline: string;
+  description?: string;
   icon: string;
   image: string;
   badge: string;
   sortOrder?: number;
+  parentId?: string | null;
+  active?: boolean;
+}
+
+export interface Collection {
+  id: string; // unique collection id / slug
+  name: string;
+  slug: string;
+  description: string;
+  coverImageUrl?: string;
+  cover_image_url?: string;
+  image?: string; // alias for coverImageUrl
+  displayOrder: number;
+  display_order?: number;
+  active: boolean;
+  parentId?: string | null; // e.g. 'hot-wheels-customize' for child sub-collections
+  parent_id?: string | null;
+  badge?: string;
+  tagline?: string;
+  icon?: string;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  productCount?: number;
+  product_count?: number;
+  productIds?: string[];
+}
+
+export interface ProductCollection {
+  id?: string;
+  productId: string;
+  product_id?: string;
+  collectionId: string;
+  collection_id?: string;
+  displayOrder?: number;
+  display_order?: number;
+  createdAt?: string;
+  created_at?: string;
 }
 
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+
+export type TrackingStatus = 'Processing' | 'Shipped' | 'Out for Delivery' | 'Delivered' | string;
+
+export interface OrderTracking {
+  id: string;
+  customer_phone: string;
+  customerPhone?: string;
+  order_id?: string | null;
+  orderId?: string | null;
+  tracking_id?: string | null;
+  trackingId?: string | null;
+  tracking_link?: string | null;
+  trackingLink?: string | null;
+  courier_name?: string | null;
+  courierName?: string | null;
+  status: TrackingStatus;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+}
 
 export interface SavedAddress {
   id: string;
@@ -71,11 +132,16 @@ export interface Product {
   id: string;
   name: string;
   category: CategoryId;
+  collectionId?: string;
+  collection_id?: string;
+  collectionIds?: string[];
+  collection_ids?: string[];
   price: number;
   originalPrice?: number;
   rating: number;
   reviewsCount: number;
   image: string;
+  imageUrl?: string;
   galleryImages?: string[];
   description: string;
   shortTagline: string;
@@ -85,6 +151,8 @@ export interface Product {
   requiresPhotoUpload?: boolean;
   collectorSpecs: CollectorSpecs;
   giftFeatures: string[];
+  series?: string;
+  tags?: string[];
 }
 
 export interface CustomCardConfig {
