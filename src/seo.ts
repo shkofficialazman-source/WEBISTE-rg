@@ -29,7 +29,7 @@ export interface SEOConfig {
 
 const DEFAULT_TITLE = 'Redline Garage | Buy Authentic Hot Wheels Online in India — Collector Cars, Gifts & Bouquets';
 const DEFAULT_DESCRIPTION = 'Buy 100% authentic Hot Wheels, custom photo blister cards, luxury die-cast bouquets & acrylic frames online in India. Fast nationwide shipping from Mangalore.';
-const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?q=80&w=1200&auto=format&fit=crop';
+const DEFAULT_IMAGE = 'https://redlinegarage.store/assets/logo.svg';
 const BASE_ORIGIN = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('run.app')
   ? window.location.origin 
   : BRAND_SITE_URL;

@@ -37,7 +37,7 @@
     <meta property="og:url" content="https://redlinegarage.store/" />
     <meta property="og:title" content="Redline Garage | Buy Authentic Hot Wheels Online in India — Collector Cars, Gifts & Bouquets" />
     <meta property="og:description" content="Buy 100% authentic Hot Wheels, custom photo blister cards, luxury die-cast bouquets & acrylic frames online in India. Fast nationwide shipping from Mangalore." />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=1200&auto=format&fit=crop&q=80" />
+    <meta property="og:image" content="https://redlinegarage.store/assets/logo.svg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Redline Garage Authentic Hot Wheels & Custom Die-Cast Studio" />
@@ -46,7 +46,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Redline Garage | Buy Authentic Hot Wheels Online in India — Collector Cars, Gifts & Bouquets" />
     <meta name="twitter:description" content="Buy 100% authentic Hot Wheels, custom photo blister cards, luxury die-cast bouquets & acrylic frames online in India. Fast nationwide shipping from Mangalore." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=1200&auto=format&fit=crop&q=80" />
+    <meta name="twitter:image" content="https://redlinegarage.store/assets/logo.svg" />
     <meta name="twitter:image:alt" content="Redline Garage Authentic Hot Wheels & Custom Die-Cast Studio" />
 
     <!-- Resource Preconnects & DNS Prefetches -->
@@ -82,34 +82,145 @@
     <!-- Inline Critical CSS for instantaneous First Contentful Paint -->
     <style>
       @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-      body { margin: 0; padding: 0; background-color: #fafafa; color: #09090b; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+      *, ::before, ::after { box-sizing: border-box; }
+      body { margin: 0; padding: 0; background-color: #ffffff; color: #09090b; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
       #root { width: 100%; min-height: 100vh; overflow-x: hidden; }
       .font-display { font-family: 'Syne', 'Plus Jakarta Sans', sans-serif; }
       .font-mono { font-family: 'Space Grotesk', monospace, sans-serif; }
+      .shell-hero-bg { background: #ffffff; border-bottom: 1px solid rgba(228, 228, 231, 0.8); }
     </style>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-LQ392RX033"></script>
+    <!-- Google tag (gtag.js) - Defer to idle callback to ensure 0ms main thread blocking -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
-      gtag('config', 'G-LQ392RX033');
+      // Defer GA4 script loading until after page paint
+      function loadGoogleAnalytics() {
+        var gaScript = document.createElement('script');
+        gaScript.async = true;
+        gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-LQ392RX033';
+        document.head.appendChild(gaScript);
+        gtag('config', 'G-LQ392RX033', { send_page_view: true });
+      }
+
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(function() {
+          setTimeout(loadGoogleAnalytics, 1500);
+        });
+      } else {
+        window.addEventListener('load', function() {
+          setTimeout(loadGoogleAnalytics, 1500);
+        });
+      }
     </script>
   </head>
   <body class="bg-white text-zinc-900 font-sans antialiased selection:bg-red-600 selection:text-white w-full max-w-full overflow-x-hidden m-0 p-0">
     <div id="root" class="w-full max-w-full overflow-x-hidden">
-      <!-- Branded Initial Loading Screen rendered immediately before JS mounts -->
-      <div style="min-height: 100vh; background-color: #09090b; color: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; text-align: center;">
-        <div style="position: relative; margin-bottom: 24px;">
-          <img src="/assets/logo.svg" alt="Redline Garage" width="460" height="110" style="height: 48px; width: auto; max-width: 85vw; aspect-ratio: 460 / 110; filter: brightness(0) invert(1);" fetchpriority="high" decoding="sync" />
+      <!-- Instant Static Pre-Rendered Shell (Matches Real App Layout Pixel-For-Pixel Instantly) -->
+      <div id="pre-render-shell" style="min-height: 100vh; background-color: #ffffff; color: #09090b; display: flex; flex-direction: column; width: 100%;">
+        <!-- 1. Top Announcement Bar -->
+        <div style="background-color: #09090b; color: #ffffff; font-family: 'Space Grotesk', monospace; font-size: 11px; padding: 6px 16px; letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #27272a;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 9999px; background-color: #10b981;"></span>
+            <span style="color: #d4d4d8; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; font-weight: 700;">
+              100% AUTHENTIC MATTEL VAULT • INDIA
+            </span>
+          </div>
+          <div style="display: none; align-items: center; gap: 16px; color: #a1a1aa; font-size: 10px;">
+            <span>MANGALORE HQ</span>
+            <span>•</span>
+            <span>ARMORED BOX PACKING</span>
+            <span>•</span>
+            <span>DISPATCH IN 24H</span>
+          </div>
+          <div style="color: #d4d4d8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+            VIP GARAGE GROUP
+          </div>
         </div>
-        <div style="width: 200px; height: 4px; background-color: #27272a; border-radius: 9999px; overflow: hidden; position: relative; margin-bottom: 16px;">
-          <div style="width: 60%; height: 100%; background-color: #dc2626; border-radius: 9999px; animation: pulse 1.5s infinite ease-in-out;"></div>
+
+        <!-- 2. Main Navigation Header -->
+        <div style="border-bottom: 1px solid #e4e4e7; background: #ffffff; height: 72px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; max-width: 1280px; margin: 0 auto; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <img src="/assets/logo.svg" alt="Redline Garage" width="460" height="110" style="height: 38px; width: auto; max-width: 200px; aspect-ratio: 460 / 110;" fetchpriority="high" decoding="sync" />
+          </div>
+          <div style="display: flex; align-items: center; gap: 24px; font-family: 'Space Grotesk', monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #18181b;">
+            <span style="display: inline-block;">Scale Models</span>
+            <span style="display: inline-block;">Custom Creation</span>
+            <span style="display: inline-block;">Track Order</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 9999px; background-color: #f4f4f5; display: flex; align-items: center; justify-content: center;"></div>
+            <div style="width: 36px; height: 36px; border-radius: 9999px; background-color: #f4f4f5; display: flex; align-items: center; justify-content: center;"></div>
+          </div>
         </div>
-        <div style="font-family: 'Space Grotesk', monospace, sans-serif; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: #a1a1aa; font-weight: 700;">
-          Connecting to Pit Lane &amp; Inventory...
+
+        <!-- 3. Hero Section Above-The-Fold -->
+        <div style="background-color: #ffffff; border-bottom: 1px solid #e4e4e7; padding: 48px 16px; max-width: 1280px; margin: 0 auto; width: 100%;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; align-items: center;">
+            
+            <!-- Left Hero Content -->
+            <div style="text-align: left;">
+              <div style="display: inline-flex; align-items: center; gap: 6px; background-color: #09090b; color: #ffffff; padding: 4px 12px; border-radius: 9999px; font-family: 'Space Grotesk', monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 16px;">
+                <span style="width: 6px; height: 6px; border-radius: 9999px; background-color: #dc2626;"></span>
+                <span>OFFICIAL DIE-CAST VAULT</span>
+              </div>
+              <h1 style="font-size: 40px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 16px 0; color: #09090b;">
+                Precision Die-Cast. <br />
+                <span style="color: #71717a; font-weight: 500;">Bespoke Creations.</span>
+              </h1>
+              <p style="font-size: 15px; color: #52525b; line-height: 1.6; margin: 0 0 24px 0; max-width: 540px;">
+                Authentic 1:64 scale collector models from Hot Wheels, Majorette, Mini GT, and CCA — alongside handcrafted photo blister cards, bouquets, and wall displays.
+              </p>
+              <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <div style="background-color: #09090b; color: #ffffff; font-family: 'Space Grotesk', monospace; font-size: 12px; font-weight: 700; padding: 14px 24px; border-radius: 16px; text-transform: uppercase;">
+                  Explore Scale Models →
+                </div>
+                <div style="background-color: #ffffff; color: #09090b; border: 1px solid #e4e4e7; font-family: 'Space Grotesk', monospace; font-size: 12px; font-weight: 700; padding: 14px 20px; border-radius: 16px; text-transform: uppercase;">
+                  Custom Creation
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Hero Frame -->
+            <div style="background-color: #fafafa; border: 1px solid #e4e4e7; border-radius: 24px; padding: 24px; min-height: 280px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e4e4e7; padding-bottom: 12px; font-family: 'Space Grotesk', monospace; font-size: 10px; font-weight: 700; color: #71717a; text-transform: uppercase;">
+                <span>FEATURED CASTING</span>
+                <span>AUTHENTIC 1:64</span>
+              </div>
+              <div style="height: 160px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f4f4f5; margin: 16px 0; display: flex; align-items: center; justify-content: center;">
+                <span style="font-family: 'Space Grotesk', monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #a1a1aa; letter-spacing: 0.1em;">
+                  REDLINE GARAGE SHOWROOM
+                </span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 13px; font-weight: 700; color: #09090b;">Collector Grade Die-Cast</div>
+                  <div style="font-family: 'Space Grotesk', monospace; font-size: 13px; font-weight: 900; color: #09090b;">₹399</div>
+                </div>
+                <div style="background-color: #09090b; color: #ffffff; font-family: 'Space Grotesk', monospace; font-size: 10px; font-weight: 700; padding: 8px 14px; border-radius: 12px; text-transform: uppercase;">
+                  View
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
+
+        <!-- 4. The Vault Header Preview -->
+        <div style="padding: 32px 16px; max-width: 1280px; margin: 0 auto; width: 100%;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #e4e4e7; padding-bottom: 16px; margin-bottom: 24px;">
+            <div>
+              <div style="font-family: 'Space Grotesk', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #71717a; letter-spacing: 0.15em;">AUTHENTIC INVENTORY</div>
+              <div style="font-size: 28px; font-weight: 900; text-transform: uppercase; color: #09090b; letter-spacing: -0.01em;">The Vault</div>
+            </div>
+            <div style="font-family: 'Space Grotesk', monospace; font-size: 11px; color: #71717a; display: flex; align-items: center; gap: 8px;">
+              <span style="width: 6px; height: 6px; border-radius: 9999px; background-color: #10b981;"></span>
+              <span>Live Stock</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { Product, CartItem, CustomCardConfig, CategoryId, UserProfile, PitCrewRole, Category } from './types';
-import { auth, isUserAdmin, fetchUserProfile, customerSignOut } from './firebase';
 import { fetchProductsFromSupabase, subscribeToProducts, fetchCategoriesFromSupabase, subscribeToCategories } from './supabase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { getCachedProducts, saveCachedProducts, getCachedCategories, saveCachedCategories } from './utils/instantCache';
 import { updateSEO } from './seo';
 
 import { ScrollProgressCar } from './components/ScrollProgressCar';
@@ -10,14 +9,14 @@ import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { HomeCollectionsFeature } from './components/HomeCollectionsFeature';
 import { HomeSpotlightSection } from './components/HomeSpotlightSection';
-import { ScaleModelsPage } from './components/ScaleModelsPage';
-import { CustomCreationPage } from './components/CustomCreationPage';
 import { WhatsAppCommunityBanner } from './components/WhatsAppCommunityBanner';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { PageLoadingState } from './components/LoadingSpinner';
 
-// Lazy-load secondary and modal components
+// Lazy-load page-level views and heavy modals
+const ScaleModelsPage = React.lazy(() => import('./components/ScaleModelsPage').then(m => ({ default: m.ScaleModelsPage })));
+const CustomCreationPage = React.lazy(() => import('./components/CustomCreationPage').then(m => ({ default: m.CustomCreationPage })));
 const ValueScanner = React.lazy(() => import('./components/ValueScanner').then(m => ({ default: m.ValueScanner })));
 const TrackOrderPage = React.lazy(() => import('./components/TrackOrderPage').then(m => ({ default: m.TrackOrderPage })));
 const WhyRedline = React.lazy(() => import('./components/WhyRedline').then(m => ({ default: m.WhyRedline })));
@@ -34,18 +33,24 @@ const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboar
 
 type AppRoute = 'home' | 'scalemodels' | 'hotwheels' | 'majorette' | 'minigt' | 'cca' | 'customcreation' | 'valuescanner' | 'track-order' | 'customer-login' | 'admin-login' | 'admin';
 
+const ADMIN_EMAIL = 'diecastlane7@gmail.com';
+const isUserAdminCheck = (user: any): boolean => {
+  return Boolean(user && user.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+};
+
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('home');
-  const [adminUser, setAdminUser] = useState<User | null>(null);
-  const [customerUser, setCustomerUser] = useState<User | null>(null);
+  const [adminUser, setAdminUser] = useState<any | null>(null);
+  const [customerUser, setCustomerUser] = useState<any | null>(null);
   const [customerProfile, setCustomerProfile] = useState<UserProfile | null>(null);
   const [isOrdersModalOpen, setIsOrdersModalOpen] = useState(false);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
-  // Products and Categories loaded from live Supabase database
-  const [productsList, setProductsList] = useState<Product[]>([]);
-  const [categoriesList, setCategoriesList] = useState<Category[]>([]);
-  const [isInitialDataLoading, setIsInitialDataLoading] = useState<boolean>(true);
+  // Products and Categories loaded immediately from instant cache, then synchronized with Supabase
+  const [productsList, setProductsList] = useState<Product[]>(() => getCachedProducts());
+  const [categoriesList, setCategoriesList] = useState<Category[]>(() => getCachedCategories());
+  const [isInitialDataLoading, setIsInitialDataLoading] = useState<boolean>(() => getCachedProducts().length === 0);
   const [isDataSyncing, setIsDataSyncing] = useState<boolean>(false);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -90,77 +95,99 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Auth State Listener
+  // Deferred Auth State Listener to ensure zero main-thread block on initial render
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      const isAdmin = isUserAdmin(user);
-      setAdminUser(isAdmin ? user : null);
+    let unsubscribe: (() => void) | undefined;
+    let isMounted = true;
 
-      if (user && !isAdmin) {
-        setCustomerUser(user);
-        try {
-          const profile = await fetchUserProfile(user.uid);
-          if (profile) {
-            setCustomerProfile(profile);
+    const initAuth = async () => {
+      try {
+        const { auth, fetchUserProfile } = await import('./firebase');
+        const { onAuthStateChanged } = await import('firebase/auth');
+
+        if (!isMounted) return;
+
+        unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (!isMounted) return;
+          const isAdmin = isUserAdminCheck(user);
+          setAdminUser(isAdmin ? user : null);
+
+          if (user && !isAdmin) {
+            setCustomerUser(user);
+            try {
+              const profile = await fetchUserProfile(user.uid, user.displayName, user.email);
+              if (isMounted) {
+                setCustomerProfile(profile || {
+                  uid: user.uid,
+                  name: user.displayName || user.email?.split('@')[0] || 'Customer',
+                  email: user.email || '',
+                  role: 'customer',
+                  createdAt: new Date().toISOString(),
+                });
+              }
+            } catch (err) {
+              if (isMounted) {
+                setCustomerProfile({
+                  uid: user.uid,
+                  name: user.displayName || user.email?.split('@')[0] || 'Customer',
+                  email: user.email || '',
+                  role: 'customer',
+                  createdAt: new Date().toISOString(),
+                });
+              }
+            }
           } else {
-            setCustomerProfile({
-              uid: user.uid,
-              name: user.displayName || user.email?.split('@')[0] || 'Customer',
-              email: user.email || '',
-              role: 'customer',
-              createdAt: new Date().toISOString(),
-            });
+            setCustomerUser(null);
+            setCustomerProfile(null);
           }
-        } catch (err) {
-          setCustomerProfile({
-            uid: user.uid,
-            name: user.displayName || user.email?.split('@')[0] || 'Customer',
-            email: user.email || '',
-            role: 'customer',
-            createdAt: new Date().toISOString(),
-          });
-        }
-      } else {
-        setCustomerUser(null);
-        setCustomerProfile(null);
-      }
 
-      const pathRoute = getRouteFromPath(window.location.pathname);
-      if (pathRoute === 'admin') {
-        if (!isAdmin) {
-          navigateToRoute('home');
-        } else {
-          setCurrentRoute('admin');
-        }
-      } else if (pathRoute === 'admin-login') {
-        if (isAdmin) {
-          navigateToRoute('admin');
-        } else {
-          setCurrentRoute('admin-login');
-        }
-      } else if (pathRoute === 'customer-login') {
-        if (user && !isAdmin) {
-          navigateToRoute('home');
-        } else {
-          setCurrentRoute('customer-login');
-        }
-      } else {
-        setCurrentRoute(pathRoute);
+          const pathRoute = getRouteFromPath(window.location.pathname);
+          if (pathRoute === 'admin') {
+            if (!isAdmin) {
+              navigateToRoute('home');
+            } else {
+              setCurrentRoute('admin');
+            }
+          } else if (pathRoute === 'admin-login') {
+            if (isAdmin) {
+              navigateToRoute('admin');
+            } else {
+              setCurrentRoute('admin-login');
+            }
+          } else if (pathRoute === 'customer-login') {
+            if (user && !isAdmin) {
+              navigateToRoute('home');
+            } else {
+              setCurrentRoute('customer-login');
+            }
+          } else {
+            setCurrentRoute(pathRoute);
+          }
+        });
+      } catch (err) {
+        console.warn('Deferred auth initialization notice:', err);
       }
-    });
+    };
+
+    // Run auth listener immediately if on auth-sensitive routes, or defer to idle for homepage visitors
+    const pathRoute = getRouteFromPath(window.location.pathname);
+    if (pathRoute === 'admin' || pathRoute === 'admin-login' || pathRoute === 'customer-login') {
+      initAuth();
+    } else if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(() => initAuth(), { timeout: 1500 });
+    } else {
+      setTimeout(initAuth, 100);
+    }
 
     const handlePopState = () => {
-      const pathRoute = getRouteFromPath(window.location.pathname);
-      if (pathRoute === 'admin' && (!auth.currentUser || !isUserAdmin(auth.currentUser))) {
-        navigateToRoute('home');
-      } else {
-        setCurrentRoute(pathRoute);
-      }
+      const pRoute = getRouteFromPath(window.location.pathname);
+      setCurrentRoute(pRoute);
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => {
-      unsubscribe();
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
       window.removeEventListener('popstate', handlePopState);
     };
   }, []);
@@ -176,9 +203,11 @@ export default function App() {
 
       if (fetchedProds && fetchedProds.length > 0) {
         setProductsList(fetchedProds);
+        saveCachedProducts(fetchedProds);
       }
       if (fetchedCats && fetchedCats.length > 0) {
         setCategoriesList(fetchedCats);
+        saveCachedCategories(fetchedCats);
       }
     } catch (err) {
       console.error('Failed to load store data from Supabase:', err);
@@ -195,15 +224,17 @@ export default function App() {
     loadStoreData();
 
     const unsubProds = subscribeToProducts((freshProducts) => {
-      if (isMounted && freshProducts) {
+      if (isMounted && freshProducts && freshProducts.length > 0) {
         setProductsList(freshProducts);
+        saveCachedProducts(freshProducts);
         setIsInitialDataLoading(false);
       }
     });
 
     const unsubCats = subscribeToCategories((freshCats) => {
-      if (isMounted && freshCats) {
+      if (isMounted && freshCats && freshCats.length > 0) {
         setCategoriesList(freshCats);
+        saveCachedCategories(freshCats);
         setIsInitialDataLoading(false);
       }
     });
@@ -260,6 +291,7 @@ export default function App() {
   // Customer signout handler
   const handleCustomerSignOut = async () => {
     try {
+      const { customerSignOut } = await import('./firebase');
       await customerSignOut();
       setCustomerUser(null);
       setCustomerProfile(null);
@@ -360,8 +392,9 @@ export default function App() {
     return (
       <Suspense fallback={<PageLoadingState />}>
         <AdminDashboard
-          onLogout={() => {
-            customerSignOut();
+          onLogout={async () => {
+            const { customerSignOut } = await import('./firebase');
+            await customerSignOut();
             navigateToRoute('home');
           }}
           onBackToStore={() => navigateToRoute('home')}
@@ -411,6 +444,7 @@ export default function App() {
         onOpenMyOrders={() => setIsOrdersModalOpen(true)}
         onCustomerLogout={handleCustomerSignOut}
         onOpenWishlist={() => setIsWishlistOpen(true)}
+        onOpenPitCrew={() => setIsChatbotOpen(true)}
         currentRoute={currentRoute}
       />
 
@@ -418,29 +452,33 @@ export default function App() {
       <main className="flex-1">
         {/* VIEW 1: Scale Models Primary Collection & Sub-Collections */}
         {isScaleModelsView && (
-          <ScaleModelsPage
-            products={productsList}
-            currentSubCollection={scaleSubCol}
-            onSelectSubCollection={(sub) => {
-              if (sub === 'all') navigateToRoute('scalemodels');
-              else navigateToRoute(sub);
-            }}
-            onAddToCart={handleAddToCart}
-            onQuickView={handleOpenQuickView}
-            userProfile={customerProfile}
-            onNavigateHome={() => navigateToRoute('home')}
-          />
+          <Suspense fallback={<PageLoadingState />}>
+            <ScaleModelsPage
+              products={productsList}
+              currentSubCollection={scaleSubCol}
+              onSelectSubCollection={(sub) => {
+                if (sub === 'all') navigateToRoute('scalemodels');
+                else navigateToRoute(sub);
+              }}
+              onAddToCart={handleAddToCart}
+              onQuickView={handleOpenQuickView}
+              userProfile={customerProfile}
+              onNavigateHome={() => navigateToRoute('home')}
+            />
+          </Suspense>
         )}
 
         {/* VIEW 2: Custom Creation Primary Collection (Frames, Bouquets, Custom Cards) */}
         {currentRoute === 'customcreation' && (
-          <CustomCreationPage
-            products={productsList}
-            onAddToCart={handleAddToCart}
-            onQuickView={handleOpenQuickView}
-            userProfile={customerProfile}
-            onNavigateHome={() => navigateToRoute('home')}
-          />
+          <Suspense fallback={<PageLoadingState />}>
+            <CustomCreationPage
+              products={productsList}
+              onAddToCart={handleAddToCart}
+              onQuickView={handleOpenQuickView}
+              userProfile={customerProfile}
+              onNavigateHome={() => navigateToRoute('home')}
+            />
+          </Suspense>
         )}
 
         {/* VIEW 3: Dedicated AI Value Scanner Page */}
@@ -568,15 +606,40 @@ export default function App() {
         )}
 
         {/* Birthday Celebration Auto-Discount Modal */}
-        <BirthdayCelebrationModal
-          userProfile={customerProfile}
-          onApplyCode={() => {
-            setIsCartOpen(true);
-          }}
-        />
+        {customerProfile?.dob && (
+          <BirthdayCelebrationModal
+            userProfile={customerProfile}
+            onApplyCode={() => {
+              setIsCartOpen(true);
+            }}
+          />
+        )}
 
-        {/* Floating AI Pit Crew Assistant */}
-        <GeminiChatbot onNavigate={handleNavigate} />
+        {/* Floating AI Pit Crew Assistant Trigger / Chat Window */}
+        {!isChatbotOpen ? (
+          <button
+            id="ai-chatbot-launcher-btn"
+            onClick={() => setIsChatbotOpen(true)}
+            className="fixed bottom-20 right-3 sm:bottom-6 sm:right-6 z-40 bg-zinc-950 hover:bg-black text-white p-3 sm:px-4 sm:py-3.5 rounded-full shadow-2xl border-2 border-red-600 flex items-center gap-2.5 transition-all transform hover:scale-105 active:scale-95 group cursor-pointer max-w-[calc(100vw-1.5rem)]"
+            title="Ask AI Pit Crew"
+            aria-label="Open Ask AI Pit Crew"
+          >
+            <div className="relative">
+              <span className="text-xl">🏎️</span>
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 border-2 border-zinc-950 rounded-full animate-pulse" />
+            </div>
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-red-400 flex items-center gap-1 leading-none">
+                Ask AI Pit Crew
+              </span>
+              <span className="text-xs font-bold text-white leading-tight">
+                Turbo, Sparky &amp; Gearbox
+              </span>
+            </div>
+          </button>
+        ) : (
+          <GeminiChatbot initialOpen={true} onNavigate={handleNavigate} />
+        )}
       </Suspense>
 
       {/* Mobile Floating Bottom Navigation Bar */}

@@ -331,90 +331,90 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-none mb-6">
           <button
             onClick={() => onSelectCategory('all')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'all'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             All Castings ({products.length})
           </button>
           <button
             onClick={() => onSelectCategory('scale-models')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'scale-models' || selectedCategory === 'scale-model-diecast'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Scale Models
           </button>
           <button
             onClick={() => onSelectCategory('hotwheels')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'hotwheels'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Hot Wheels
           </button>
           <button
             onClick={() => onSelectCategory('minigt')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'minigt'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Mini GT
           </button>
           <button
             onClick={() => onSelectCategory('majorette')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'majorette'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Majorette
           </button>
           <button
             onClick={() => onSelectCategory('custom-creations')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'custom-creations' || selectedCategory === 'hot-wheels-customize'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Custom Creations
           </button>
           <button
             onClick={() => onSelectCategory('bouquets')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'bouquets'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Bouquets
           </button>
           <button
             onClick={() => onSelectCategory('custom-cards')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'custom-cards'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Custom Cards
           </button>
           <button
             onClick={() => onSelectCategory('frames')}
-            className={`btn-press px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+            className={`btn-press px-4 py-2.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
               selectedCategory === 'frames'
-                ? 'bg-zinc-950 text-white shadow-xs'
-                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                ? 'bg-zinc-950 text-white shadow-md'
+                : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
             Frames
@@ -536,17 +536,17 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   <div
                     key={product.id}
                     onClick={() => handleProductCardClick(product)}
-                    className="group bg-white border border-zinc-200 hover:border-zinc-900 rounded-xl overflow-hidden flex flex-col justify-between transition-all duration-200 relative cursor-pointer hover:shadow-md btn-press"
+                    className="group bg-white border border-zinc-200/90 hover:border-zinc-950 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 relative cursor-pointer shadow-2xs hover:shadow-lg btn-press"
                   >
                     {/* Top Badges & Wishlist */}
                     <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
                       <div>
                         {isOutOfStock ? (
-                          <span className="bg-zinc-900 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded tracking-wider uppercase">
+                          <span className="bg-zinc-950 text-white text-[9px] font-mono font-bold px-2.5 py-1 rounded-md tracking-wider uppercase shadow-xs">
                             Sold Out
                           </span>
                         ) : hasDiscount ? (
-                          <span className="bg-red-600 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded tracking-wider uppercase">
+                          <span className="bg-red-600 text-white text-[9px] font-mono font-bold px-2.5 py-1 rounded-md tracking-wider uppercase shadow-xs">
                             Sale
                           </span>
                         ) : null}
@@ -555,10 +555,10 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleToggleWishlist(product.id, e)}
-                        className={`pointer-events-auto p-1.5 rounded-full backdrop-blur-md transition-all border min-h-[32px] min-w-[32px] flex items-center justify-center cursor-pointer ${
+                        className={`pointer-events-auto p-2 rounded-full backdrop-blur-md transition-all border min-h-[34px] min-w-[34px] flex items-center justify-center cursor-pointer ${
                           isWishlisted
-                            ? 'bg-red-600 text-white border-red-600'
-                            : 'bg-white/90 hover:bg-white text-zinc-400 hover:text-red-600 border-zinc-200'
+                            ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                            : 'bg-white/90 hover:bg-white text-zinc-400 hover:text-red-600 border-zinc-200 shadow-2xs'
                         }`}
                         title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
                         aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
@@ -568,7 +568,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                     </div>
 
                     {/* Image Container */}
-                    <div className="relative aspect-4/3 bg-zinc-50 p-2 overflow-hidden flex items-center justify-center border-b border-zinc-100">
+                    <div className="relative aspect-4/3 bg-zinc-50/70 p-3 overflow-hidden flex items-center justify-center border-b border-zinc-100">
                       <ResponsiveImage
                         src={product.image || product.imageUrl}
                         alt={product.name}
@@ -580,9 +580,9 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                     </div>
 
                     {/* Product Details */}
-                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3 text-left">
+                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3 text-left">
                       <div className="space-y-1">
-                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest font-semibold">
                           {product.collectorSpecs?.scale || '1:64 SCALE'} • {product.series || 'DIE-CAST'}
                         </div>
                         <h3 className="text-sm font-bold text-zinc-950 font-sans line-clamp-1 group-hover:text-red-600 transition-colors">
@@ -606,7 +606,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                           type="button"
                           onClick={(e) => handleAddToCartWithTrack(product, e)}
                           disabled={isOutOfStock}
-                          className={`font-mono text-xs font-bold uppercase py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all min-h-[40px] ${
+                          className={`font-mono text-xs font-bold uppercase py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all min-h-[42px] ${
                             isOutOfStock
                               ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
                               : 'bg-zinc-950 hover:bg-zinc-800 active:bg-black text-white cursor-pointer shadow-2xs'
@@ -620,7 +620,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                           href={generateWhatsAppUrl(product)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono text-xs font-bold uppercase py-2.5 px-2 rounded-lg flex items-center justify-center gap-1 text-center min-h-[40px] cursor-pointer"
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono text-xs font-bold uppercase py-2.5 px-2 rounded-xl flex items-center justify-center gap-1 text-center min-h-[42px] cursor-pointer"
                           title="Chat on WhatsApp"
                         >
                           <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />

@@ -109,7 +109,7 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
             <div
               key={cat.id}
               onClick={() => onSelectCategory(cat.id)}
-              className="group relative bg-white border border-zinc-200 hover:border-zinc-900 rounded-xl overflow-hidden cursor-pointer transition-all duration-200 flex flex-col justify-between hover:shadow-md btn-press"
+              className="group relative bg-white border border-zinc-200/90 hover:border-zinc-950 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 flex flex-col justify-between shadow-2xs hover:shadow-lg btn-press"
             >
               {/* Image Frame */}
               <div className="relative aspect-4/3 overflow-hidden bg-zinc-50 border-b border-zinc-100 p-2 flex items-center justify-center">
@@ -118,12 +118,12 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
                   alt={cat.name}
                   aspectRatio="auto"
                   objectFit="cover"
-                  className="w-full h-full object-cover rounded-lg group-hover:scale-103 transition-transform duration-300"
+                  className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
 
               {/* Card Meta */}
-              <div className="p-4 space-y-1 text-left">
+              <div className="p-4 sm:p-5 space-y-1.5 text-left">
                 <div className="flex items-center justify-between">
                   <h3 className="font-display font-bold text-sm text-zinc-950 uppercase tracking-wide group-hover:text-red-600 transition-colors">
                     {cat.name}

@@ -49,9 +49,9 @@ export const WhyRedline: React.FC = () => {
           {pillars.map((pillar, idx) => (
             <div
               key={idx}
-              className="bg-white border border-zinc-200 rounded-xl p-6 text-left space-y-3 hover:border-zinc-900 transition-all duration-200 shadow-2xs btn-press"
+              className="bg-white border border-zinc-200/90 rounded-2xl p-6 text-left space-y-3.5 hover:border-zinc-950 transition-all duration-300 shadow-2xs hover:shadow-lg btn-press"
             >
-              <div className="w-10 h-10 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-center">
+              <div className="w-11 h-11 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-center">
                 {pillar.icon}
               </div>
               <h3 className="text-sm font-display font-bold uppercase tracking-wide text-zinc-950">
@@ -60,16 +60,16 @@ export const WhyRedline: React.FC = () => {
               <p className="text-xs text-zinc-600 leading-relaxed font-sans">
                 {pillar.description}
               </p>
-              <div className="pt-2 flex items-center gap-1 text-[10px] font-mono text-emerald-600 font-bold uppercase tracking-wider">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Verified Guarantee</span>
+              <div className="pt-1 flex items-center gap-1.5 text-[10px] font-mono text-emerald-700 font-bold uppercase tracking-wider">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Verified Standard</span>
               </div>
             </div>
           ))}
         </div>
 
         {/* Proof Figures Strip */}
-        <div className="mt-12 bg-white border border-zinc-200 rounded-xl p-6 sm:p-8 grid grid-cols-2 lg:grid-cols-4 gap-6 text-center font-mono">
+        <div className="mt-12 bg-white border border-zinc-200/90 rounded-2xl p-6 sm:p-8 grid grid-cols-2 lg:grid-cols-4 gap-6 text-center font-mono shadow-2xs">
           <div className="space-y-1">
             <div className="text-2xl sm:text-3xl font-black text-zinc-950">2,500+</div>
             <div className="text-[11px] text-zinc-400 uppercase font-bold tracking-wider">Castings Delivered</div>
