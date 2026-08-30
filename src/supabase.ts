@@ -237,34 +237,46 @@ export const addProductToSupabase = async (
   };
 
   try {
-    const { error } = await supabase.from('products').insert([
-      {
-        id: newId,
-        name: productData.name,
-        category: productData.category,
-        price: Number(productData.price) || 0,
-        original_price: productData.originalPrice ? Number(productData.originalPrice) : null,
-        image: productData.image,
-        gallery_images: productData.galleryImages && productData.galleryImages.length > 0 ? productData.galleryImages : (productData.image ? [productData.image] : []),
-        description: productData.description || '',
-        short_tagline: productData.shortTagline || '',
-        stock_count: Number(productData.stockCount) || 0,
-        is_bestseller: Boolean(productData.isBestSeller),
-        is_new_release: Boolean(productData.isNewRelease),
-        collector_specs: collectorSpecs,
-        gift_features: productData.giftFeatures || [
-          'Includes Collector Case',
-          'Express Dispatch in 24h',
-        ],
-        rating: productData.rating || 5.0,
-        reviews_count: productData.reviewsCount || 1,
-        created_at: new Date().toISOString(),
-      },
-    ]);
+    const insertPayload: any = {
+      id: newId,
+      name: productData.name,
+      category: productData.category,
+      price: Number(productData.price) || 0,
+      original_price: productData.originalPrice ? Number(productData.originalPrice) : null,
+      image: productData.image,
+      gallery_images: productData.galleryImages && productData.galleryImages.length > 0 ? productData.galleryImages : (productData.image ? [productData.image] : []),
+      description: productData.description || '',
+      short_tagline: productData.shortTagline || '',
+      stock_count: Number(productData.stockCount) || 0,
+      is_bestseller: Boolean(productData.isBestSeller),
+      is_new_release: Boolean(productData.isNewRelease),
+      collector_specs: collectorSpecs,
+      gift_features: productData.giftFeatures || [
+        'Includes Collector Case',
+        'Express Dispatch in 24h',
+      ],
+      rating: productData.rating || 5.0,
+      reviews_count: productData.reviewsCount || 1,
+      created_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase.from('products').insert([insertPayload]).select();
+
+    // If table uses bigint / numeric auto-increment for id, strip string id and retry
+    if (error && (error.message?.includes('bigint') || error.message?.includes('integer') || error.message?.includes('syntax for type'))) {
+      delete insertPayload.id;
+      const retry = await supabase.from('products').insert([insertPayload]).select();
+      error = retry.error;
+      data = retry.data;
+    }
 
     if (error) {
       console.error('Supabase product insert FAILED:', error.message);
       throw new Error(`Product was not saved to the database: ${error.message}`);
+    }
+
+    if (data && data[0]?.id) {
+      productPayload.id = String(data[0].id);
     }
   } catch (err: any) {
     console.error('Could not insert to Supabase products table:', err);

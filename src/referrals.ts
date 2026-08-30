@@ -74,7 +74,7 @@ export const REFERRAL_SQL_SCHEMA = `-- =========================================
 
 -- 1. Create referral_codes table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.referral_codes (
-    id TEXT PRIMARY KEY DEFAULT ('ref_' || gen_random_uuid()::text),
+    id BIGSERIAL PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
     discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'flat')),
     discount_value NUMERIC(10, 2) NOT NULL CHECK (discount_value > 0),
@@ -162,12 +162,12 @@ TO anon, authenticated
 USING (true);
 
 -- 6. Seed starter referral & coupon codes
-INSERT INTO public.referral_codes (id, code, discount_type, discount_value, active, uses_count, min_order_amount, total_discount_given, is_collector_referral, creator_name)
+INSERT INTO public.referral_codes (code, discount_type, discount_value, active, uses_count, min_order_amount, total_discount_given, is_collector_referral, creator_name)
 VALUES 
-  ('ref-welcome10', 'WELCOME10', 'percentage', 10.00, true, 42, 0.00, 4200.00, false, 'Redline Garage Welcome Desk'),
-  ('ref-redline50', 'REDLINE50', 'flat', 50.00, true, 28, 499.00, 1400.00, false, 'Standard Flat Offer'),
-  ('ref-hotwheels15', 'HOTWHEELS15', 'percentage', 15.00, true, 19, 999.00, 3150.00, false, 'Diecast Collectors Special'),
-  ('ref-vipcrew100', 'PITCREW100', 'flat', 100.00, true, 15, 1499.00, 1500.00, true, 'VIP Pit Crew Club')
+  ('WELCOME10', 'percentage', 10.00, true, 42, 0.00, 4200.00, false, 'Redline Garage Welcome Desk'),
+  ('REDLINE50', 'flat', 50.00, true, 28, 499.00, 1400.00, false, 'Standard Flat Offer'),
+  ('HOTWHEELS15', 'percentage', 15.00, true, 19, 999.00, 3150.00, false, 'Diecast Collectors Special'),
+  ('PITCREW100', 'flat', 100.00, true, 15, 1499.00, 1500.00, true, 'VIP Pit Crew Club')
 ON CONFLICT (code) DO UPDATE SET
   discount_type = EXCLUDED.discount_type,
   discount_value = EXCLUDED.discount_value,
@@ -258,18 +258,18 @@ export const fetchReferralCodesFromSupabase = async (): Promise<ReferralCode[]> 
 
 /**
  * Create a new Referral / Promo Code in Supabase and Local Storage.
- * Includes defensive schema adaptation to gracefully handle databases that
- * have not yet executed all column additions.
+ * Defensively lets PostgreSQL generate the numeric BIGSERIAL primary key,
+ * completely avoiding bigint type syntax mismatch errors.
  */
 export const createReferralCodeInSupabase = async (
   codeData: Omit<ReferralCode, 'id' | 'usesCount' | 'totalDiscountGiven' | 'createdAt'> & { id?: string }
 ): Promise<ReferralCode> => {
   const cleanCode = codeData.code.toUpperCase().replace(/\s+/g, '').trim();
-  const id = codeData.id || `ref-${cleanCode.toLowerCase()}-${Date.now()}`;
+  const fallbackId = `ref-${cleanCode.toLowerCase()}-${Date.now()}`;
   const now = new Date().toISOString();
 
   const newReferral: ReferralCode = {
-    id,
+    id: fallbackId,
     code: cleanCode,
     discountType: codeData.discountType,
     discountValue: Number(codeData.discountValue),
@@ -288,8 +288,9 @@ export const createReferralCodeInSupabase = async (
     createdAt: now,
   };
 
+  // Important: We omit 'id' from the insert payload so that PostgreSQL auto-increments
+  // its BIGSERIAL / identity column without type syntax conflicts.
   const dbPayload: Record<string, any> = {
-    id: newReferral.id,
     code: newReferral.code,
     discount_type: newReferral.discountType,
     discount_value: newReferral.discountValue,
@@ -309,8 +310,11 @@ export const createReferralCodeInSupabase = async (
     updated_at: now,
   };
 
-  // Attempt initial upsert
-  let { error } = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
+  // Attempt initial upsert on unique constraint 'code' and select returned row with real DB id
+  let { data, error } = await supabase
+    .from('referral_codes')
+    .upsert(dbPayload, { onConflict: 'code' })
+    .select();
 
   // Adaptive column pruning: If Supabase reports a missing column in older table schemas, strip it and retry
   if (error && (error.message?.includes('Could not find the') || error.message?.includes('column') || error.code === 'PGRST204')) {
@@ -320,23 +324,30 @@ export const createReferralCodeInSupabase = async (
     if (missingColMatch && missingColMatch[1]) {
       const missingCol = missingColMatch[1];
       delete dbPayload[missingCol];
-      const retry = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
+      const retry = await supabase
+        .from('referral_codes')
+        .upsert(dbPayload, { onConflict: 'code' })
+        .select();
       error = retry.error;
+      data = retry.data;
     }
   }
 
   // Fallback to minimal core fields if schema cache is very outdated
   if (error && (error.message?.includes('Could not find') || error.code === 'PGRST204')) {
     const minimalPayload = {
-      id: newReferral.id,
       code: newReferral.code,
       discount_type: newReferral.discountType,
       discount_value: newReferral.discountValue,
       active: newReferral.active,
     };
-    const minimalRetry = await supabase.from('referral_codes').upsert(minimalPayload, { onConflict: 'code' });
+    const minimalRetry = await supabase
+      .from('referral_codes')
+      .upsert(minimalPayload, { onConflict: 'code' })
+      .select();
     if (!minimalRetry.error) {
       error = null;
+      data = minimalRetry.data;
     }
   }
 
@@ -348,9 +359,14 @@ export const createReferralCodeInSupabase = async (
     }
   }
 
+  // Assign the real PostgreSQL database ID if returned
+  if (data && data[0]?.id !== undefined && data[0]?.id !== null) {
+    newReferral.id = String(data[0].id);
+  }
+
   // Update local cache so code is instantly usable across app
   const localList = getLocalReferralCodes();
-  const filtered = localList.filter(c => c.code !== cleanCode && c.id !== id);
+  const filtered = localList.filter(c => c.code !== cleanCode && c.id !== newReferral.id && c.id !== fallbackId);
   filtered.unshift(newReferral);
   saveLocalReferralCodes(filtered);
 
@@ -382,16 +398,32 @@ export const updateReferralCodeInSupabase = async (
     if (updates.creatorName !== undefined) dbUpdates.creator_name = updates.creatorName;
     if (updates.expiresAt !== undefined) dbUpdates.expires_at = updates.expiresAt;
 
-    let updateRes = await supabase
-      .from('referral_codes')
-      .update(dbUpdates)
-      .eq('id', codeId);
+    const isNumericId = /^\d+$/.test(String(codeId).trim());
+    const cleanCode = updates.code ? updates.code.toUpperCase().trim() : undefined;
 
-    if (updateRes.error && updates.code) {
+    let updateRes;
+    if (isNumericId) {
       updateRes = await supabase
         .from('referral_codes')
         .update(dbUpdates)
-        .eq('code', updates.code.toUpperCase().trim());
+        .eq('id', Number(codeId));
+    } else if (cleanCode) {
+      updateRes = await supabase
+        .from('referral_codes')
+        .update(dbUpdates)
+        .eq('code', cleanCode);
+    } else {
+      updateRes = await supabase
+        .from('referral_codes')
+        .update(dbUpdates)
+        .eq('code', String(codeId).toUpperCase().trim());
+    }
+
+    if (updateRes.error && cleanCode && isNumericId) {
+      updateRes = await supabase
+        .from('referral_codes')
+        .update(dbUpdates)
+        .eq('code', cleanCode);
     }
 
     // Adaptive column pruning if schema is missing a column
@@ -400,17 +432,24 @@ export const updateReferralCodeInSupabase = async (
       if (missingColMatch && missingColMatch[1]) {
         const missingCol = missingColMatch[1];
         delete dbUpdates[missingCol];
-        updateRes = await supabase
-          .from('referral_codes')
-          .update(dbUpdates)
-          .eq('id', codeId);
+        if (isNumericId) {
+          updateRes = await supabase
+            .from('referral_codes')
+            .update(dbUpdates)
+            .eq('id', Number(codeId));
+        } else {
+          updateRes = await supabase
+            .from('referral_codes')
+            .update(dbUpdates)
+            .eq('code', cleanCode || String(codeId).toUpperCase().trim());
+        }
       }
     }
 
     // Update local cache
     const localList = getLocalReferralCodes();
     const updatedList = localList.map(c => {
-      if (c.id === codeId || (updates.code && c.code === updates.code.toUpperCase().trim())) {
+      if (c.id === codeId || (cleanCode && c.code === cleanCode) || (c.code === String(codeId).toUpperCase().trim())) {
         return { ...c, ...updates };
       }
       return c;
@@ -434,37 +473,42 @@ export const deleteReferralCodeFromSupabase = async (
   codeString?: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    // 1. Execute deletion on Supabase table by ID
-    const deleteByIdRes = await supabase
-      .from('referral_codes')
-      .delete()
-      .eq('id', codeId);
+    const isNumericId = /^\d+$/.test(String(codeId).trim());
+    const cleanCode = codeString ? codeString.toUpperCase().trim() : (!isNumericId ? String(codeId).toUpperCase().trim() : undefined);
 
-    if (deleteByIdRes.error) {
-      console.error('Supabase delete referral by ID error:', deleteByIdRes.error);
-      return {
-        success: false,
-        error: `Supabase delete failed: ${deleteByIdRes.error.message || 'Row Level Security policy or permission error.'}`,
-      };
-    }
+    let deleteRes = null;
 
-    // 2. Also ensure deletion by code string if provided (in case of legacy/seeded ID mismatch)
-    if (codeString) {
-      const cleanCode = codeString.toUpperCase().trim();
-      const deleteByCodeRes = await supabase
+    // 1. If we have a clean code name, delete by code first (guaranteed type safe)
+    if (cleanCode) {
+      deleteRes = await supabase
         .from('referral_codes')
         .delete()
         .eq('code', cleanCode);
+    }
 
-      if (deleteByCodeRes.error) {
-        console.warn('Supabase delete referral by Code note:', deleteByCodeRes.error.message);
+    // 2. If we have a numeric ID and code deletion wasn't run or had an error, delete by numeric ID
+    if (isNumericId) {
+      const deleteById = await supabase
+        .from('referral_codes')
+        .delete()
+        .eq('id', Number(codeId));
+      if (!deleteRes || deleteRes.error) {
+        deleteRes = deleteById;
       }
+    }
+
+    if (deleteRes && deleteRes.error) {
+      console.error('Supabase delete referral error:', deleteRes.error);
+      return {
+        success: false,
+        error: `Supabase delete failed: ${deleteRes.error.message || 'Row Level Security policy or permission error.'}`,
+      };
     }
 
     // 3. Only update local cache once Supabase deletion succeeded
     const localList = getLocalReferralCodes();
     const filtered = localList.filter(
-      c => c.id !== codeId && (!codeString || c.code !== codeString.toUpperCase().trim())
+      c => c.id !== codeId && (!cleanCode || c.code !== cleanCode)
     );
     saveLocalReferralCodes(filtered);
 
