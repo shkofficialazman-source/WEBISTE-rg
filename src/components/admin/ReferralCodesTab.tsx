@@ -213,7 +213,7 @@ export const ReferralCodesTab: React.FC = () => {
     setIsSaving(true);
     try {
       const maxUsesNum = formData.maxUses ? parseInt(formData.maxUses, 10) : null;
-      const expiryIso = formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined;
+      const expiryIso = formData.expiresAt ? new Date(`${formData.expiresAt}T23:59:59`).toISOString() : undefined;
 
       if (editingCode) {
         await updateReferralCodeInSupabase(editingCode.id, {
@@ -222,7 +222,7 @@ export const ReferralCodesTab: React.FC = () => {
           discountValue: Number(formData.discountValue),
           minOrderAmount: Number(formData.minOrderAmount || 0),
           maxUses: maxUsesNum,
-          expiresAt: expiryIso,
+          expiresAt: formData.expiresAt ? expiryIso : null,
           isCollectorReferral: formData.isCollectorReferral,
           creatorName: formData.creatorName.trim() || 'Redline Garage',
           active: formData.active,

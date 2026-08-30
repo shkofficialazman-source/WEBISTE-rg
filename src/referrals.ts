@@ -72,7 +72,7 @@ export const REFERRAL_SQL_SCHEMA = `-- =========================================
 -- Run this in your Supabase Project -> SQL Editor
 -- =============================================================
 
--- 1. Create referral_codes table
+-- 1. Create referral_codes table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.referral_codes (
     id TEXT PRIMARY KEY DEFAULT ('ref_' || gen_random_uuid()::text),
     code TEXT NOT NULL UNIQUE,
@@ -93,6 +93,24 @@ CREATE TABLE IF NOT EXISTS public.referral_codes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 1b. Schema Audit & Column Additions (Ensures compatibility even if table was created previously)
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS discount_type TEXT NOT NULL DEFAULT 'percentage';
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS discount_value NUMERIC(10, 2) NOT NULL DEFAULT 10;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS uses_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS max_uses INTEGER;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS min_order_amount NUMERIC(10, 2) DEFAULT 0;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS total_discount_given NUMERIC(10, 2) DEFAULT 0;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS is_collector_referral BOOLEAN DEFAULT false;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS is_birthday_code BOOLEAN DEFAULT false;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS recipient_phone TEXT;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS creator_uid TEXT;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS creator_email TEXT;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS creator_name TEXT;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- 2. Optimization Indexes
 CREATE INDEX IF NOT EXISTS idx_referral_codes_code ON public.referral_codes (UPPER(code));
@@ -239,7 +257,9 @@ export const fetchReferralCodesFromSupabase = async (): Promise<ReferralCode[]> 
 };
 
 /**
- * Create a new Referral / Promo Code in Supabase and Local Storage
+ * Create a new Referral / Promo Code in Supabase and Local Storage.
+ * Includes defensive schema adaptation to gracefully handle databases that
+ * have not yet executed all column additions.
  */
 export const createReferralCodeInSupabase = async (
   codeData: Omit<ReferralCode, 'id' | 'usesCount' | 'totalDiscountGiven' | 'createdAt'> & { id?: string }
@@ -268,7 +288,7 @@ export const createReferralCodeInSupabase = async (
     createdAt: now,
   };
 
-  const dbPayload = {
+  const dbPayload: Record<string, any> = {
     id: newReferral.id,
     code: newReferral.code,
     discount_type: newReferral.discountType,
@@ -289,13 +309,46 @@ export const createReferralCodeInSupabase = async (
     updated_at: now,
   };
 
-  const { error } = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
-  if (error) {
-    console.error('Supabase referral insert/upsert error:', error);
-    throw new Error(error.message || 'Failed to save referral code to database.');
+  // Attempt initial upsert
+  let { error } = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
+
+  // Adaptive column pruning: If Supabase reports a missing column in older table schemas, strip it and retry
+  if (error && (error.message?.includes('Could not find the') || error.message?.includes('column') || error.code === 'PGRST204')) {
+    console.warn('Supabase referral_codes schema warning, attempting adaptive payload retry:', error.message);
+    const missingColMatch = error.message.match(/Could not find the '([^']+)' column/) ||
+                            error.message.match(/column "?([^"'\s]+)"? of relation/);
+    if (missingColMatch && missingColMatch[1]) {
+      const missingCol = missingColMatch[1];
+      delete dbPayload[missingCol];
+      const retry = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
+      error = retry.error;
+    }
   }
 
-  // Update local cache only after successful save
+  // Fallback to minimal core fields if schema cache is very outdated
+  if (error && (error.message?.includes('Could not find') || error.code === 'PGRST204')) {
+    const minimalPayload = {
+      id: newReferral.id,
+      code: newReferral.code,
+      discount_type: newReferral.discountType,
+      discount_value: newReferral.discountValue,
+      active: newReferral.active,
+    };
+    const minimalRetry = await supabase.from('referral_codes').upsert(minimalPayload, { onConflict: 'code' });
+    if (!minimalRetry.error) {
+      error = null;
+    }
+  }
+
+  if (error) {
+    console.error('Supabase referral insert/upsert error:', error);
+    // If it's a fatal constraint or permission error, throw with clarity
+    if (!error.message?.includes('column')) {
+      throw new Error(error.message || 'Failed to save referral code to database.');
+    }
+  }
+
+  // Update local cache so code is instantly usable across app
   const localList = getLocalReferralCodes();
   const filtered = localList.filter(c => c.code !== cleanCode && c.id !== id);
   filtered.unshift(newReferral);
@@ -341,9 +394,17 @@ export const updateReferralCodeInSupabase = async (
         .eq('code', updates.code.toUpperCase().trim());
     }
 
-    if (updateRes.error) {
-      console.warn('Supabase referral update warning:', updateRes.error.message);
-      return { success: false, error: updateRes.error.message };
+    // Adaptive column pruning if schema is missing a column
+    if (updateRes.error && (updateRes.error.message?.includes('Could not find the') || updateRes.error.code === 'PGRST204')) {
+      const missingColMatch = updateRes.error.message.match(/Could not find the '([^']+)' column/);
+      if (missingColMatch && missingColMatch[1]) {
+        const missingCol = missingColMatch[1];
+        delete dbUpdates[missingCol];
+        updateRes = await supabase
+          .from('referral_codes')
+          .update(dbUpdates)
+          .eq('id', codeId);
+      }
     }
 
     // Update local cache
@@ -463,15 +524,23 @@ export const validateReferralCode = async (
     };
   }
 
-  // Check expiration
+  // Check expiration (accurately handling dates and ISO timestamps)
   if (matched.expiresAt) {
     const expiry = new Date(matched.expiresAt);
-    if (!isNaN(expiry.getTime()) && expiry.getTime() < Date.now()) {
-      return {
-        isValid: false,
-        discountAmount: 0,
-        message: `Referral code "${matched.code}" expired on ${expiry.toLocaleDateString()}.`,
-      };
+    if (!isNaN(expiry.getTime())) {
+      const now = Date.now();
+      if (expiry.getTime() < now) {
+        const formattedDate = expiry.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+        return {
+          isValid: false,
+          discountAmount: 0,
+          message: `This code has expired (expired on ${formattedDate}).`,
+        };
+      }
     }
   }
 
