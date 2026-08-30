@@ -447,8 +447,8 @@ Return ONLY a pure valid JSON object matching this schema:
   "confidenceLevel": "'High', 'Medium', or 'Low'"
 }`;
 
-      // Cascade with valid official Gemini models: standard flash, latest alias, and fast flash-lite
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+      // Cascade with high-throughput and resilient official Gemini models: fast flash-lite, latest alias, and standard flash
+      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'];
       let lastErr: any = null;
       let lastErrMessage = '';
       let parsedData: any = null;
@@ -516,7 +516,7 @@ Return ONLY a pure valid JSON object matching this schema:
         } catch (callErr: any) {
           lastErr = callErr;
           lastErrMessage = callErr?.message || String(callErr);
-          console.log(`[ValueScanner Diagnostic #${scanId}] Model "${modelName}" note: ${lastErrMessage}`);
+          console.warn(`[ValueScanner Diagnostic #${scanId}] Model "${modelName}" note: ${lastErrMessage}`);
         }
       }
 
@@ -705,7 +705,7 @@ Return ONLY a valid JSON object matching this schema:
   "analyzedAt": "${new Date().toISOString()}"
 }`;
 
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'];
       let parsedData: any = null;
       let lastErrMessage = '';
 
@@ -936,8 +936,8 @@ Format Guidelines:
         },
       });
 
-      // Model cascade for conversational chatbot: gemini-3.7-flash -> gemini-3.6-flash -> gemini-3.1-flash-lite
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+      // Model cascade for conversational chatbot: fast flash-lite, latest alias, and standard flash
+      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'];
       let modelReplyText = '';
       let modelUsed = '';
       let lastErrMessage = '';
@@ -1065,96 +1065,6 @@ Format Guidelines:
         probeErr?.message?.toLowerCase().includes('quota') ||
         probeErr?.message?.toLowerCase().includes('resource_exhausted');
       return res.status(diagnosticResult.liveProbe.isQuotaError ? 429 : 500).json(diagnosticResult);
-    }
-  });
-
-  // Server-side Gemini API route for Multi-Turn Hot Wheels AI Pit Crew Chatbot
-  app.post('/api/gemini/chat', async (req, res) => {
-    try {
-      const { messages } = req.body;
-
-      if (!Array.isArray(messages) || messages.length === 0) {
-        return res.status(400).json({ error: 'Messages array is required' });
-      }
-
-      const { key: apiKey } = getGeminiApiKey();
-      if (!apiKey) {
-        // High quality informative response if no API key is set
-        const lastUserMsg = messages[messages.length - 1]?.text || '';
-        return res.json({
-          success: true,
-          reply: `🏎️ **Redline Pit Crew:** Thanks for asking about "${lastUserMsg.slice(0, 40)}..."! Welcome to Redline Garage India — your premier spot for authentic Hot Wheels mainlines, Car Culture premiums, custom die-cast bouquets, and custom blister cards. All orders ship nationwide across India with verified UPI payments and live tracking! How can I help you customize or pick your next casting today?`,
-        });
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
-
-      const systemInstruction = `You are the Redline Garage AI Pit Crew & Hot Wheels Concierge for "Redline Garage" (India's premier collector destination).
-Your tone is passionate, knowledgeable, friendly, and deeply immersed in die-cast collector culture (Hot Wheels, Matchbox, MiniGT, Kaido House, Inno64).
-You provide helpful information on:
-1. Identifying rare castings (Mainlines, Treasure Hunts / TH with flame logo, Super Treasure Hunts / $TH with Spectraflame paint and Real Riders rubber wheels, RLC / Red Line Club exclusives).
-2. Custom Blister Cards (personalized cards made for anniversaries, birthdays, car enthusiasts where customers upload their photo and vehicle name).
-3. Die-Cast Bouquets & Acrylic Collector Display Frames.
-4. Ordering & Payments: Redline Garage accepts Direct UPI (Google Pay, PhonePe, Paytm, BHIM) with instant WhatsApp order confirmation and tracking across India.
-5. Loyalty Program (earn points on confirmed orders and redeem at checkout) and Referral Promo codes.
-6. Valuation advice: Provide helpful price context in Indian Rupees (₹) and mention our built-in AI Value Scanner & HW Price Guide tool.
-
-Keep answers concise, well-structured, energetic, and formatted cleanly with markdown bolding and bullet points. Never hallucinate fake coupon codes.`;
-
-      // Transform history into contents array for Gemini
-      const contents = messages.map((m: any) => ({
-        role: m.role === 'model' || m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.text || '' }],
-      }));
-
-      // Try gemini-3.7-flash for general multi-turn tasks, fallback to gemini-3.6-flash and gemini-3.1-flash-lite
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
-      let replyText = '';
-
-      for (const model of modelsToTry) {
-        try {
-          const response = await ai.models.generateContent({
-            model,
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.7,
-            },
-          });
-
-          if (response.text) {
-            replyText = response.text;
-            break;
-          }
-        } catch (err: any) {
-          console.warn(`Chat attempt with ${model} failed:`, err?.message || err);
-        }
-      }
-
-      if (!replyText) {
-        return res.status(500).json({
-          success: false,
-          error: 'Could not generate a response from the AI Pit Crew right now. Please try again.',
-        });
-      }
-
-      return res.json({
-        success: true,
-        reply: replyText,
-      });
-    } catch (err: any) {
-      console.error('Gemini Chat Error:', err);
-      return res.status(500).json({
-        success: false,
-        error: err?.message || 'Failed to generate chat response',
-      });
     }
   });
 
