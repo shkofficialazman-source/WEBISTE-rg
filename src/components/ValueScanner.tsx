@@ -40,6 +40,8 @@ export interface ScanResultData {
   valueExplanation: string;
   collectorTip: string;
   confidenceLevel: string;
+  appraisalSource?: string;
+  isAiLive?: boolean;
 }
 
 export type ScannerErrorType =
@@ -256,11 +258,29 @@ export const ValueScanner: React.FC<ValueScannerProps> = ({ onNavigate }) => {
     const notes = params.notes || notesInput;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutDuration = 20000; // 20s reasonable timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+    const startTime = Date.now();
 
-    const timer1 = setTimeout(() => setScanningStatus('Detecting casting lines, tampos & card series...'), 1200);
-    const timer2 = setTimeout(() => setScanningStatus('Analyzing rarity tier & Indian secondary market demand...'), 2600);
-    const timer3 = setTimeout(() => setScanningStatus('Computing fair collector valuation range in INR (₹)...'), 4200);
+    const timer1 = setTimeout(() => setScanningStatus('Detecting casting lines, tampos & card series...'), 1000);
+    const timer2 = setTimeout(() => setScanningStatus('Analyzing rarity tier & Indian secondary market demand...'), 2400);
+    const timer3 = setTimeout(() => setScanningStatus('Computing fair collector valuation range in INR (₹)...'), 4000);
+
+    const payload = {
+      imageBase64: img || undefined,
+      mimeType: params.mimeType || 'image/jpeg',
+      fileName: params.fileName || currentFileName || 'car-scan.jpg',
+      modelName: model.trim() || undefined,
+      brand,
+      condition,
+      notes,
+      timestamp: Date.now(),
+    };
+
+    console.groupCollapsed(`%c[ValueScanner] Initiating Die-Cast Appraisal (${model || 'Photo Scan'})`, 'color: #38bdf8; font-weight: bold;');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Parameters:', { model: model || '(From Image)', brand, condition, hasImage: Boolean(img) });
+    console.log('Timeout set to:', `${timeoutDuration}ms`);
 
     try {
       let response: Response;
@@ -271,60 +291,65 @@ export const ValueScanner: React.FC<ValueScannerProps> = ({ onNavigate }) => {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache',
           },
-          body: JSON.stringify({ 
-            imageBase64: img || undefined,
-            mimeType: params.mimeType || 'image/jpeg',
-            fileName: params.fileName || currentFileName || 'car-scan.jpg',
-            modelName: model.trim() || undefined,
-            brand,
-            condition,
-            notes,
-            timestamp: Date.now(),
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         });
       } catch (fetchErr: any) {
         if (fetchErr.name === 'AbortError') throw fetchErr;
-        // Fallback to /api/scan-car
+        console.warn('[ValueScanner] Primary /api/gemini/scan-hotwheels unreachable, attempting /api/scan-car fallback...');
         response = await fetch('/api/scan-car', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            imageBase64: img || undefined,
-            mimeType: params.mimeType || 'image/jpeg',
-            modelName: model.trim() || undefined,
-            brand,
-            condition,
-            notes,
-            timestamp: Date.now(),
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         });
       }
 
       clearTimeout(timeoutId);
+      const elapsedMs = Date.now() - startTime;
+      console.log(`[ValueScanner] Server responded in ${elapsedMs}ms with HTTP Status:`, response.status);
 
       const data = await response.json();
+      console.log('[ValueScanner] Received payload:', data);
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Valuation service encountered an issue. Please try again.');
+        const serverError = data.error || data.rawError || `Server returned error (${response.status})`;
+        const errorCategory: ScannerErrorType = data.errorType || (response.status === 429 ? 'quota_exceeded' : response.status === 503 ? 'service_busy' : 'internal_api_error');
+        
+        setErrorType(errorCategory);
+        setErrorMessage(serverError);
+        console.error('[ValueScanner] Valuation failed with reason:', serverError);
+        return;
       }
 
-      const result: ScanResultData = data.data;
+      const result: ScanResultData = {
+        ...data.data,
+        appraisalSource: data.appraisalSource || (data.isAiLive ? 'Google Gemini AI' : 'Redline Secondary Market Database'),
+        isAiLive: data.isAiLive ?? true,
+      };
+
+      console.log('%c[ValueScanner] Valuation successfully computed:', 'color: #34d399; font-weight: bold;', result);
       setScanResult(result);
       saveToHistory(result, img);
+
     } catch (err: any) {
-      console.error('[ValueScanner] Scan error:', err);
+      const elapsedMs = Date.now() - startTime;
+      console.error('[ValueScanner] Error during scan execution:', err);
       let msg = err.message || 'Failed to value car. Please try again with clear details or a photo.';
       let type: ScannerErrorType = 'general';
 
-      if (err.name === 'AbortError' || msg.toLowerCase().includes('timeout')) {
+      if (err.name === 'AbortError') {
         type = 'network_timeout';
-        msg = 'Scan request timed out. Please tap "Retry Scan".';
+        msg = `Scan request timed out after ${timeoutDuration / 1000}s. The AI server took longer than expected. Please tap "Retry Scan".`;
+      } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
+        type = 'network_timeout';
+        msg = 'Network connection issue while communicating with valuation server. Please check your connection and tap Retry.';
       }
+
       setErrorType(type);
       setErrorMessage(msg);
     } finally {
+      console.groupEnd();
       clearTimeout(timeoutId);
       clearTimeout(timer1);
       clearTimeout(timer2);
@@ -683,6 +708,15 @@ export const ValueScanner: React.FC<ValueScannerProps> = ({ onNavigate }) => {
                         <span className="text-[10px] font-mono text-zinc-400">
                           {scanResult.brand || selectedBrand}
                         </span>
+                        {scanResult.appraisalSource && (
+                          <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
+                            scanResult.isAiLive
+                              ? 'bg-emerald-950/80 border-emerald-500/30 text-emerald-400'
+                              : 'bg-amber-950/80 border-amber-500/30 text-amber-300'
+                          }`}>
+                            {scanResult.appraisalSource}
+                          </span>
+                        )}
                       </div>
                       <h2 className="text-xl sm:text-2xl font-black text-white font-sans">
                         {scanResult.carModelName}
