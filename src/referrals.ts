@@ -107,30 +107,41 @@ DROP POLICY IF EXISTS "Allow public read active referral_codes" ON public.referr
 DROP POLICY IF EXISTS "Allow public read referral_codes" ON public.referral_codes;
 DROP POLICY IF EXISTS "Allow authenticated admin full access on referral_codes" ON public.referral_codes;
 DROP POLICY IF EXISTS "Allow admin modify referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow app admin modify referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow select referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow insert referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow update referral_codes" ON public.referral_codes;
+DROP POLICY IF EXISTS "Allow delete referral_codes" ON public.referral_codes;
 
--- 5. RLS Policies:
--- (A) Public / Anonymous / Authenticated customers can read active codes for checkout validation
-CREATE POLICY "Allow public read active referral_codes" 
+-- 5. Explicit CRUD RLS Policies for full admin & storefront access:
+-- (A) SELECT (Read all codes for checkout validation and admin management)
+CREATE POLICY "Allow select referral_codes" 
 ON public.referral_codes 
 FOR SELECT 
 TO anon, authenticated 
-USING (active = true);
+USING (true);
 
--- (B) Authenticated admin users have full INSERT, UPDATE, DELETE permissions
-CREATE POLICY "Allow authenticated admin full access on referral_codes" 
+-- (B) INSERT (Create new promo and affiliate codes)
+CREATE POLICY "Allow insert referral_codes" 
 ON public.referral_codes 
-FOR ALL 
-TO authenticated 
+FOR INSERT 
+TO anon, authenticated 
+WITH CHECK (true);
+
+-- (C) UPDATE (Edit details and toggle active status)
+CREATE POLICY "Allow update referral_codes" 
+ON public.referral_codes 
+FOR UPDATE 
+TO anon, authenticated 
 USING (true) 
 WITH CHECK (true);
 
--- (C) Allow applet admin client fallback modify
-CREATE POLICY "Allow app admin modify referral_codes" 
+-- (D) DELETE (Delete codes permanently)
+CREATE POLICY "Allow delete referral_codes" 
 ON public.referral_codes 
-FOR ALL 
-TO anon 
-USING (true) 
-WITH CHECK (true);
+FOR DELETE 
+TO anon, authenticated 
+USING (true);
 
 -- 6. Seed starter referral & coupon codes
 INSERT INTO public.referral_codes (id, code, discount_type, discount_value, active, uses_count, min_order_amount, total_discount_given, is_collector_referral, creator_name)
@@ -156,7 +167,7 @@ const getLocalReferralCodes = (): ReferralCode[] => {
     const raw = localStorage.getItem(REFERRAL_CODES_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -217,13 +228,8 @@ export const fetchReferralCodesFromSupabase = async (): Promise<ReferralCode[]> 
       return getLocalReferralCodes();
     }
 
-    if (!data || data.length === 0) {
-      // If table is empty, return defaults & attempt background seed
-      const defaults = getLocalReferralCodes();
-      return defaults;
-    }
-
-    const mapped = data.map(mapDbToReferralCode);
+    // Query succeeded, use returned rows as source of truth
+    const mapped = (data || []).map(mapDbToReferralCode);
     saveLocalReferralCodes(mapped);
     return mapped;
   } catch (err) {
@@ -262,42 +268,38 @@ export const createReferralCodeInSupabase = async (
     createdAt: now,
   };
 
-  // Update local cache immediately
+  const dbPayload = {
+    id: newReferral.id,
+    code: newReferral.code,
+    discount_type: newReferral.discountType,
+    discount_value: newReferral.discountValue,
+    active: newReferral.active,
+    uses_count: 0,
+    max_uses: newReferral.maxUses,
+    min_order_amount: newReferral.minOrderAmount,
+    total_discount_given: 0,
+    is_collector_referral: newReferral.isCollectorReferral,
+    is_birthday_code: newReferral.isBirthdayCode,
+    recipient_phone: newReferral.recipientPhone || null,
+    creator_uid: newReferral.creatorUid || null,
+    creator_email: newReferral.creatorEmail || null,
+    creator_name: newReferral.creatorName || null,
+    expires_at: newReferral.expiresAt || null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { error } = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
+  if (error) {
+    console.error('Supabase referral insert/upsert error:', error);
+    throw new Error(error.message || 'Failed to save referral code to database.');
+  }
+
+  // Update local cache only after successful save
   const localList = getLocalReferralCodes();
   const filtered = localList.filter(c => c.code !== cleanCode && c.id !== id);
   filtered.unshift(newReferral);
   saveLocalReferralCodes(filtered);
-
-  // Sync to Supabase
-  try {
-    const dbPayload = {
-      id: newReferral.id,
-      code: newReferral.code,
-      discount_type: newReferral.discountType,
-      discount_value: newReferral.discountValue,
-      active: newReferral.active,
-      uses_count: 0,
-      max_uses: newReferral.maxUses,
-      min_order_amount: newReferral.minOrderAmount,
-      total_discount_given: 0,
-      is_collector_referral: newReferral.isCollectorReferral,
-      is_birthday_code: newReferral.isBirthdayCode,
-      recipient_phone: newReferral.recipientPhone || null,
-      creator_uid: newReferral.creatorUid || null,
-      creator_email: newReferral.creatorEmail || null,
-      creator_name: newReferral.creatorName || null,
-      expires_at: newReferral.expiresAt || null,
-      created_at: now,
-      updated_at: now,
-    };
-
-    const { error } = await supabase.from('referral_codes').upsert(dbPayload, { onConflict: 'code' });
-    if (error) {
-      console.warn('Supabase referral insert warning:', error.message);
-    }
-  } catch (err) {
-    console.warn('createReferralCodeInSupabase remote write error:', err);
-  }
 
   return newReferral;
 };
@@ -308,18 +310,7 @@ export const createReferralCodeInSupabase = async (
 export const updateReferralCodeInSupabase = async (
   codeId: string,
   updates: Partial<ReferralCode>
-): Promise<void> => {
-  // Update local cache
-  const localList = getLocalReferralCodes();
-  const updatedList = localList.map(c => {
-    if (c.id === codeId || (updates.code && c.code === updates.code.toUpperCase().trim())) {
-      return { ...c, ...updates };
-    }
-    return c;
-  });
-  saveLocalReferralCodes(updatedList);
-
-  // Update Supabase
+): Promise<{ success: boolean; error?: string }> => {
   try {
     const dbUpdates: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -338,34 +329,91 @@ export const updateReferralCodeInSupabase = async (
     if (updates.creatorName !== undefined) dbUpdates.creator_name = updates.creatorName;
     if (updates.expiresAt !== undefined) dbUpdates.expires_at = updates.expiresAt;
 
-    const { error } = await supabase
+    let updateRes = await supabase
       .from('referral_codes')
       .update(dbUpdates)
       .eq('id', codeId);
 
-    if (error) {
-      console.warn('Supabase referral update warning:', error.message);
+    if (updateRes.error && updates.code) {
+      updateRes = await supabase
+        .from('referral_codes')
+        .update(dbUpdates)
+        .eq('code', updates.code.toUpperCase().trim());
     }
-  } catch (err) {
-    console.warn('updateReferralCodeInSupabase remote error:', err);
+
+    if (updateRes.error) {
+      console.warn('Supabase referral update warning:', updateRes.error.message);
+      return { success: false, error: updateRes.error.message };
+    }
+
+    // Update local cache
+    const localList = getLocalReferralCodes();
+    const updatedList = localList.map(c => {
+      if (c.id === codeId || (updates.code && c.code === updates.code.toUpperCase().trim())) {
+        return { ...c, ...updates };
+      }
+      return c;
+    });
+    saveLocalReferralCodes(updatedList);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateReferralCodeInSupabase error:', err);
+    return { success: false, error: err?.message || 'Database update error' };
   }
 };
 
 /**
- * Delete a referral code
+ * Delete a referral code from Supabase PostgreSQL database
+ * Checks for errors, deletes by ID and Code to ensure database removal,
+ * and updates local cache only upon confirmed success.
  */
-export const deleteReferralCodeFromSupabase = async (codeId: string): Promise<void> => {
-  const localList = getLocalReferralCodes();
-  const filtered = localList.filter(c => c.id !== codeId);
-  saveLocalReferralCodes(filtered);
-
+export const deleteReferralCodeFromSupabase = async (
+  codeId: string,
+  codeString?: string
+): Promise<{ success: boolean; error?: string }> => {
   try {
-    const { error } = await supabase.from('referral_codes').delete().eq('id', codeId);
-    if (error) {
-      console.warn('Supabase delete referral warning:', error.message);
+    // 1. Execute deletion on Supabase table by ID
+    const deleteByIdRes = await supabase
+      .from('referral_codes')
+      .delete()
+      .eq('id', codeId);
+
+    if (deleteByIdRes.error) {
+      console.error('Supabase delete referral by ID error:', deleteByIdRes.error);
+      return {
+        success: false,
+        error: `Supabase delete failed: ${deleteByIdRes.error.message || 'Row Level Security policy or permission error.'}`,
+      };
     }
-  } catch (err) {
-    console.warn('deleteReferralCodeFromSupabase error:', err);
+
+    // 2. Also ensure deletion by code string if provided (in case of legacy/seeded ID mismatch)
+    if (codeString) {
+      const cleanCode = codeString.toUpperCase().trim();
+      const deleteByCodeRes = await supabase
+        .from('referral_codes')
+        .delete()
+        .eq('code', cleanCode);
+
+      if (deleteByCodeRes.error) {
+        console.warn('Supabase delete referral by Code note:', deleteByCodeRes.error.message);
+      }
+    }
+
+    // 3. Only update local cache once Supabase deletion succeeded
+    const localList = getLocalReferralCodes();
+    const filtered = localList.filter(
+      c => c.id !== codeId && (!codeString || c.code !== codeString.toUpperCase().trim())
+    );
+    saveLocalReferralCodes(filtered);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteReferralCodeFromSupabase unexpected exception:', err);
+    return {
+      success: false,
+      error: err?.message || 'Unexpected network or database error during deletion.',
+    };
   }
 };
 

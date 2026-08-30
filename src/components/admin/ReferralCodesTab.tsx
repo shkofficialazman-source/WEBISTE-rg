@@ -75,6 +75,8 @@ export const ReferralCodesTab: React.FC = () => {
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Interactive Live Code Tester State
   const [testCodeInput, setTestCodeInput] = useState<string>('');
@@ -251,16 +253,54 @@ export const ReferralCodesTab: React.FC = () => {
 
   const handleToggleActive = async (code: ReferralCode) => {
     const newStatus = !code.active;
-    await updateReferralCodeInSupabase(code.id, { active: newStatus });
-    setCodes(prev => prev.map(c => (c.id === code.id ? { ...c, active: newStatus } : c)));
+    const res = await updateReferralCodeInSupabase(code.id, { active: newStatus });
+    if (res.success) {
+      setCodes(prev => prev.map(c => (c.id === code.id ? { ...c, active: newStatus } : c)));
+    } else {
+      setActionFeedback({
+        type: 'error',
+        message: `Failed to update status for "${code.code}": ${res.error || 'Database error'}`
+      });
+    }
   };
 
   const handleDeleteCode = async (code: ReferralCode) => {
-    if (!window.confirm(`Are you sure you want to delete referral code "${code.code}"?`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete referral code "${code.code}" from Supabase?`)) {
       return;
     }
-    await deleteReferralCodeFromSupabase(code.id);
-    setCodes(prev => prev.filter(c => c.id !== code.id));
+
+    setDeletingCodeId(code.id);
+    setActionFeedback(null);
+
+    try {
+      const res = await deleteReferralCodeFromSupabase(code.id, code.code);
+      if (!res.success) {
+        setActionFeedback({
+          type: 'error',
+          message: res.error || `Failed to delete "${code.code}". Please verify your Supabase RLS delete policies.`
+        });
+        return;
+      }
+
+      // Only remove from UI state once confirmed deleted from Supabase
+      setCodes(prev => prev.filter(c => c.id !== code.id && c.code !== code.code));
+      setActionFeedback({
+        type: 'success',
+        message: `Referral code "${code.code}" was permanently deleted from the Supabase database.`
+      });
+
+      // Auto-clear success message after 4s
+      setTimeout(() => {
+        setActionFeedback(prev => (prev?.message.includes(code.code) ? null : prev));
+      }, 4000);
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'error',
+        message: err?.message || `Unexpected error deleting "${code.code}".`
+      });
+    } finally {
+      setDeletingCodeId(null);
+    }
   };
 
   const handleCopyCode = (code: ReferralCode) => {
@@ -537,6 +577,42 @@ export const ReferralCodesTab: React.FC = () => {
         )}
       </div>
 
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between gap-3 animate-in fade-in duration-200 ${
+          actionFeedback.type === 'success'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+            : 'bg-red-50 border-red-300 text-red-900'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {actionFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            )}
+            <span className="font-medium">{actionFeedback.message}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {actionFeedback.type === 'error' && (
+              <button
+                type="button"
+                onClick={() => setShowSqlDrawer(true)}
+                className="px-2.5 py-1 bg-red-600 text-white font-mono font-bold rounded-lg hover:bg-red-500 text-[10px] uppercase transition cursor-pointer"
+              >
+                Fix Supabase RLS Policies
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActionFeedback(null)}
+              className="p-1 text-zinc-500 hover:text-zinc-800 rounded transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-zinc-200">
         <div className="relative flex-1">
@@ -744,11 +820,20 @@ export const ReferralCodesTab: React.FC = () => {
 
                           <button
                             type="button"
+                            disabled={deletingCodeId === code.id}
                             onClick={() => handleDeleteCode(code)}
-                            className="p-1.5 text-zinc-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                            title="Delete Code"
+                            className={`p-1.5 rounded-lg transition cursor-pointer ${
+                              deletingCodeId === code.id
+                                ? 'bg-red-50 text-red-600 opacity-80 cursor-not-allowed'
+                                : 'text-zinc-500 hover:text-red-600 hover:bg-red-50'
+                            }`}
+                            title={deletingCodeId === code.id ? 'Deleting from Supabase...' : 'Delete Code'}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingCodeId === code.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         </div>
                       </td>
