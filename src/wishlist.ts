@@ -103,30 +103,51 @@ export const subscribeToWishlist = (callback: WishlistListener): (() => void) =>
 export const syncWishlistOnLogin = async (userProfile: UserProfile): Promise<string[]> => {
   if (!userProfile) return getWishlistIds();
   const localIds = getWishlistIds();
+  const identifier = userProfile.uid || userProfile.email;
+  if (!identifier) return localIds;
 
+  let remoteIds: string[] = [];
+
+  // 1. Fetch from server API proxy (connects to Supabase with service role)
   try {
-    const identifier = userProfile.uid || userProfile.email;
-    const { data, error } = await supabase
-      .from('user_wishlists')
-      .select('product_ids')
-      .eq('user_id', identifier)
-      .maybeSingle();
-
-    if (!error && data && Array.isArray(data.product_ids)) {
-      const merged = Array.from(new Set([...localIds, ...data.product_ids]));
-      setWishlistIds(merged);
-      await syncWishlistToSupabase(merged, userProfile);
-      return merged;
-    } else {
-      if (localIds.length > 0) {
-        await syncWishlistToSupabase(localIds, userProfile);
+    const res = await fetch(`/api/wishlist/${encodeURIComponent(identifier)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.productIds)) {
+        remoteIds = json.productIds;
       }
     }
-  } catch (err) {
-    console.warn('Wishlist login sync fallback:', err);
+  } catch (apiErr) {
+    console.warn('Server wishlist proxy notice:', apiErr);
   }
 
-  return localIds;
+  // 2. Also try direct client Supabase query if remoteIds is empty
+  if (remoteIds.length === 0) {
+    try {
+      const { data, error } = await supabase
+        .from('user_wishlists')
+        .select('product_ids')
+        .eq('user_id', identifier)
+        .maybeSingle();
+
+      if (!error && data && Array.isArray(data.product_ids)) {
+        remoteIds = data.product_ids;
+      }
+    } catch (err) {
+      console.warn('Client Supabase wishlist fetch notice:', err);
+    }
+  }
+
+  // Merge remote items with any local items added prior to login
+  const merged = Array.from(new Set([...localIds, ...remoteIds]));
+  setWishlistIds(merged);
+
+  // Persist the combined wishlist back to Supabase
+  if (merged.length > 0) {
+    await syncWishlistToSupabase(merged, userProfile);
+  }
+
+  return merged;
 };
 
 export const syncWishlistToSupabase = async (
@@ -137,17 +158,39 @@ export const syncWishlistToSupabase = async (
     const identifier = userProfile.uid || userProfile.email;
     if (!identifier) return;
 
-    await supabase
-      .from('user_wishlists')
-      .upsert(
-        {
-          user_id: identifier,
-          user_email: userProfile.email,
-          product_ids: ids,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      );
+    const cleanIds = Array.from(new Set(ids));
+
+    // 1. Sync via Server REST API (has service key, bypasses RLS issues)
+    try {
+      await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: identifier,
+          userEmail: userProfile.email || '',
+          productIds: cleanIds,
+        }),
+      });
+    } catch (apiErr) {
+      console.warn('API wishlist sync notice:', apiErr);
+    }
+
+    // 2. Also attempt direct client Supabase upsert
+    try {
+      await supabase
+        .from('user_wishlists')
+        .upsert(
+          {
+            user_id: identifier,
+            user_email: userProfile.email,
+            product_ids: cleanIds,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+    } catch (dbErr) {
+      // Non-blocking fallback
+    }
   } catch (err) {
     // Non-blocking fallback
   }

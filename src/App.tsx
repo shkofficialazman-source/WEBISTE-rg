@@ -3,6 +3,7 @@ import { Product, CartItem, CustomCardConfig, CategoryId, UserProfile, PitCrewRo
 import { fetchProductsFromSupabase, subscribeToProducts, fetchCategoriesFromSupabase, subscribeToCategories } from './supabase';
 import { getCachedProducts, saveCachedProducts, getCachedCategories, saveCachedCategories } from './utils/instantCache';
 import { updateSEO } from './seo';
+import { syncWishlistOnLogin } from './wishlist';
 
 import { ScrollProgressCar } from './components/ScrollProgressCar';
 import { Navbar } from './components/Navbar';
@@ -30,8 +31,9 @@ const GeminiChatbot = React.lazy(() => import('./components/GeminiChatbot').then
 const CustomerAuth = React.lazy(() => import('./components/CustomerAuth').then(m => ({ default: m.CustomerAuth })));
 const AdminLogin = React.lazy(() => import('./components/admin/AdminLogin').then(m => ({ default: m.AdminLogin })));
 const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const ResellerMarketplacePage = React.lazy(() => import('./components/marketplace/ResellerMarketplacePage').then(m => ({ default: m.ResellerMarketplacePage })));
 
-type AppRoute = 'home' | 'scalemodels' | 'hotwheels' | 'majorette' | 'minigt' | 'cca' | 'customcreation' | 'valuescanner' | 'track-order' | 'customer-login' | 'admin-login' | 'admin';
+type AppRoute = 'home' | 'scalemodels' | 'hotwheels' | 'majorette' | 'minigt' | 'cca' | 'customcreation' | 'valuescanner' | 'track-order' | 'customer-login' | 'admin-login' | 'admin' | 'marketplace';
 
 const ADMIN_EMAIL = 'diecastlane7@gmail.com';
 const isUserAdminCheck = (user: any): boolean => {
@@ -57,6 +59,7 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [customCreationCategory, setCustomCreationCategory] = useState<'all' | 'frames' | 'bouquets' | 'custom-cards'>('all');
 
   // Determine initial route from URL path
   const getRouteFromPath = (path: string): AppRoute => {
@@ -72,6 +75,7 @@ export default function App() {
     if (cleanPath === '/customcreation' || cleanPath === '/custom-creation') return 'customcreation';
     if (cleanPath === '/valuescanner' || cleanPath === '/value-scanner' || cleanPath === '/scanner') return 'valuescanner';
     if (cleanPath === '/track-order' || cleanPath === '/trackorder' || cleanPath === '/tracking' || cleanPath === '/track') return 'track-order';
+    if (cleanPath === '/marketplace' || cleanPath === '/reseller' || cleanPath === '/resellers') return 'marketplace';
     return 'home';
   };
 
@@ -86,9 +90,15 @@ export default function App() {
     if (route === 'majorette') path = '/majorette';
     if (route === 'minigt') path = '/minigt';
     if (route === 'cca') path = '/cca';
-    if (route === 'customcreation') path = '/customcreation';
+    if (route === 'customcreation') {
+      path = '/customcreation';
+      if (subParam && ['frames', 'bouquets', 'custom-cards', 'all'].includes(subParam)) {
+        setCustomCreationCategory(subParam as any);
+      }
+    }
     if (route === 'valuescanner') path = '/valuescanner';
     if (route === 'track-order') path = '/track-order';
+    if (route === 'marketplace') path = '/marketplace';
 
     window.history.pushState({}, '', path);
     setCurrentRoute(route);
@@ -116,24 +126,28 @@ export default function App() {
             setCustomerUser(user);
             try {
               const profile = await fetchUserProfile(user.uid, user.displayName, user.email);
+              const finalProfile = profile || {
+                uid: user.uid,
+                name: user.displayName || user.email?.split('@')[0] || 'Customer',
+                email: user.email || '',
+                role: 'customer',
+                createdAt: new Date().toISOString(),
+              };
               if (isMounted) {
-                setCustomerProfile(profile || {
-                  uid: user.uid,
-                  name: user.displayName || user.email?.split('@')[0] || 'Customer',
-                  email: user.email || '',
-                  role: 'customer',
-                  createdAt: new Date().toISOString(),
-                });
+                setCustomerProfile(finalProfile);
+                syncWishlistOnLogin(finalProfile).catch(e => console.warn('Wishlist sync notice:', e));
               }
             } catch (err) {
               if (isMounted) {
-                setCustomerProfile({
+                const fallbackProfile: UserProfile = {
                   uid: user.uid,
                   name: user.displayName || user.email?.split('@')[0] || 'Customer',
                   email: user.email || '',
                   role: 'customer',
                   createdAt: new Date().toISOString(),
-                });
+                };
+                setCustomerProfile(fallbackProfile);
+                syncWishlistOnLogin(fallbackProfile).catch(e => console.warn('Wishlist sync notice:', e));
               }
             }
           } else {
@@ -357,7 +371,7 @@ export default function App() {
 
   // Navigation router helper
   const handleNavigate = (routeOrSection: string, subParam?: string) => {
-    if (['home', 'scalemodels', 'hotwheels', 'majorette', 'minigt', 'cca', 'customcreation', 'valuescanner', 'customer-login', 'admin-login', 'admin'].includes(routeOrSection)) {
+    if (['home', 'scalemodels', 'hotwheels', 'majorette', 'minigt', 'cca', 'customcreation', 'valuescanner', 'track-order', 'marketplace', 'customer-login', 'admin-login', 'admin'].includes(routeOrSection)) {
       navigateToRoute(routeOrSection as AppRoute, subParam);
       return;
     }
@@ -367,6 +381,14 @@ export default function App() {
     }
     if (routeOrSection === 'valuescanner' || routeOrSection === 'scanner') {
       navigateToRoute('valuescanner');
+      return;
+    }
+    if (routeOrSection === 'track' || routeOrSection === 'tracking' || routeOrSection === 'track-order' || routeOrSection === 'trackorder') {
+      navigateToRoute('track-order');
+      return;
+    }
+    if (routeOrSection === 'marketplace' || routeOrSection === 'reseller' || routeOrSection === 'resellers') {
+      navigateToRoute('marketplace');
       return;
     }
     // If it's a section on home page
@@ -381,11 +403,6 @@ export default function App() {
       if (elem) elem.scrollIntoView({ behavior: 'smooth' });
     }
   };
-
-  // Show loading indicator on first start
-  if (isInitialDataLoading && productsList.length === 0) {
-    return <PageLoadingState />;
-  }
 
   // Admin Views
   if (currentRoute === 'admin') {
@@ -464,6 +481,8 @@ export default function App() {
               onQuickView={handleOpenQuickView}
               userProfile={customerProfile}
               onNavigateHome={() => navigateToRoute('home')}
+              initialSearchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
             />
           </Suspense>
         )}
@@ -477,6 +496,7 @@ export default function App() {
               onQuickView={handleOpenQuickView}
               userProfile={customerProfile}
               onNavigateHome={() => navigateToRoute('home')}
+              initialCategory={customCreationCategory}
             />
           </Suspense>
         )}
@@ -495,7 +515,14 @@ export default function App() {
           </Suspense>
         )}
 
-        {/* VIEW 4: Clean Apple-Style Minimalist Homepage */}
+        {/* VIEW 5: Peer-to-Peer Reseller Marketplace */}
+        {currentRoute === 'marketplace' && (
+          <Suspense fallback={<PageLoadingState />}>
+            <ResellerMarketplacePage onNavigateHome={() => navigateToRoute('home')} />
+          </Suspense>
+        )}
+
+        {/* VIEW 6: Clean Apple-Style Minimalist Homepage */}
         {currentRoute === 'home' && (
           <div>
             {/* 1. Hero Section with Direct Scale Models & Custom Creation Actions */}
@@ -510,6 +537,39 @@ export default function App() {
               onNavigateToScaleModels={() => navigateToRoute('scalemodels')}
               onNavigateToCustomCreation={() => navigateToRoute('customcreation')}
             />
+
+            {/* 2.5. Reseller Marketplace Discovery Banner */}
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-8">
+              <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+                <div className="space-y-2 max-w-xl z-10 text-center md:text-left">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/80 border border-red-700/60 text-red-400 text-[11px] font-mono font-bold uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span>Peer-to-Peer Hot Wheels Trading</span>
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-black uppercase font-mono tracking-tight text-white">
+                    Collector Reseller Marketplace
+                  </h3>
+                  <p className="text-xs sm:text-sm text-zinc-300 font-sans leading-relaxed">
+                    Buy, sell, and negotiate authentic Hot Wheels, Super Treasure Hunts, and rare collector castings directly with verified independent resellers across India.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 z-10 w-full sm:w-auto">
+                  <button
+                    onClick={() => navigateToRoute('marketplace')}
+                    className="w-full sm:w-auto px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-mono text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-red-600/20 text-center cursor-pointer"
+                  >
+                    Explore Marketplace &rarr;
+                  </button>
+                  <button
+                    onClick={() => navigateToRoute('marketplace')}
+                    className="w-full sm:w-auto px-5 py-3.5 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-2xl font-mono text-xs font-bold uppercase tracking-wider transition text-center cursor-pointer"
+                  >
+                    Sell on Redline Garage
+                  </button>
+                </div>
+              </div>
+            </section>
 
             {/* 3. Curated Homepage Spotlight (Small hand-picked section) */}
             <HomeSpotlightSection

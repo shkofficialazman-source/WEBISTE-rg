@@ -9,6 +9,7 @@ interface CustomCreationPageProps {
   onQuickView: (product: Product) => void;
   userProfile?: UserProfile | null;
   onNavigateHome: () => void;
+  initialCategory?: 'all' | 'frames' | 'bouquets' | 'custom-cards';
 }
 
 type CustomCategoryTab = 'all' | 'frames' | 'bouquets' | 'custom-cards';
@@ -26,9 +27,17 @@ export const CustomCreationPage: React.FC<CustomCreationPageProps> = ({
   onQuickView,
   userProfile,
   onNavigateHome,
+  initialCategory = 'all',
 }) => {
-  const [activeTab, setActiveTab] = useState<CustomCategoryTab>('all');
+  const [activeTab, setActiveTab] = useState<CustomCategoryTab>(initialCategory);
   const [wishlistVersion, setWishlistVersion] = useState(0);
+
+  // Synchronize when initialCategory changes via navigation
+  React.useEffect(() => {
+    if (initialCategory) {
+      setActiveTab(initialCategory);
+    }
+  }, [initialCategory]);
 
   // Filter custom creation products
   const customProducts = useMemo(() => {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Product, UserProfile } from '../types';
-import { ShoppingBag, Eye, Heart, Flame, Shield, Car, ChevronRight, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { ShoppingBag, Eye, Heart, Flame, Shield, Car, ChevronRight, SlidersHorizontal, ArrowUpDown, Filter, X, RotateCcw } from 'lucide-react';
 import { isWishlisted, toggleWishlist } from '../wishlist';
 
 interface ScaleModelsPageProps {
@@ -11,6 +11,8 @@ interface ScaleModelsPageProps {
   onQuickView: (product: Product) => void;
   userProfile?: UserProfile | null;
   onNavigateHome: () => void;
+  initialSearchQuery?: string;
+  onSearchQueryChange?: (q: string) => void;
 }
 
 const SUB_COLLECTIONS = [
@@ -29,10 +31,42 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
   onQuickView,
   userProfile,
   onNavigateHome,
+  initialSearchQuery = '',
+  onSearchQueryChange,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [selectedBrand, setSelectedBrand] = useState<'all' | 'minigt' | 'majorette' | 'hotwheels' | 'cca'>('all');
+  const [priceRange, setPriceRange] = useState<'all' | 'under500' | '500to1500' | 'above1500'>('all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'rating'>('featured');
   const [wishlistVersion, setWishlistVersion] = useState(0);
+
+  React.useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    if (onSearchQueryChange) onSearchQueryChange(val);
+  };
+
+  const handleBrandChange = (brand: 'all' | 'minigt' | 'majorette' | 'hotwheels' | 'cca') => {
+    setSelectedBrand(brand);
+    if (brand !== 'all' && onSelectSubCollection) {
+      // Synchronize with parent sub-collection state if needed
+      onSelectSubCollection(brand);
+    } else if (brand === 'all' && onSelectSubCollection) {
+      onSelectSubCollection('all');
+    }
+  };
+
+  // Sync brand filter with currentSubCollection prop
+  React.useEffect(() => {
+    if (currentSubCollection && currentSubCollection !== selectedBrand) {
+      setSelectedBrand(currentSubCollection);
+    }
+  }, [currentSubCollection]);
 
   // Filter scale model products
   const scaleModelProducts = useMemo(() => {
@@ -45,26 +79,31 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
       const isCustom = ['bouquets', 'frames', 'custom-cards'].includes(colId) || nameLower.includes('bouquet') || nameLower.includes('customized hot wheels card');
       if (isCustom) return false;
 
-      if (currentSubCollection === 'all') return true;
-      if (currentSubCollection === 'hotwheels') {
-        return colId === 'hotwheels' || colIds.includes('hotwheels') || (!colId.includes('majorette') && !colId.includes('minigt') && !colId.includes('cca'));
-      }
-      if (currentSubCollection === 'majorette') {
-        return colId === 'majorette' || colIds.includes('majorette') || nameLower.includes('majorette');
-      }
-      if (currentSubCollection === 'minigt') {
+      // Filter by brand (Mini GT, Majorette, Hot Wheels, CCA)
+      const effectiveBrand = selectedBrand !== 'all' ? selectedBrand : currentSubCollection;
+
+      if (effectiveBrand === 'all') return true;
+      if (effectiveBrand === 'minigt') {
         return colId === 'minigt' || colIds.includes('minigt') || nameLower.includes('mini gt') || nameLower.includes('minigt');
       }
-      if (currentSubCollection === 'cca') {
+      if (effectiveBrand === 'majorette') {
+        return colId === 'majorette' || colIds.includes('majorette') || nameLower.includes('majorette');
+      }
+      if (effectiveBrand === 'hotwheels') {
+        return colId === 'hotwheels' || colIds.includes('hotwheels') || (!colId.includes('majorette') && !colId.includes('minigt') && !colId.includes('cca'));
+      }
+      if (effectiveBrand === 'cca') {
         return colId === 'cca' || colIds.includes('cca') || nameLower.includes('cca');
       }
       return true;
     });
-  }, [products, currentSubCollection]);
+  }, [products, currentSubCollection, selectedBrand]);
 
-  // Search and Sort
+  // Search, Price Filtering, and Sorting
   const filteredAndSorted = useMemo(() => {
     let result = scaleModelProducts;
+
+    // Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(p => 
@@ -74,13 +113,24 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
       );
     }
 
+    // Price range filter
+    if (priceRange !== 'all') {
+      result = result.filter(p => {
+        if (priceRange === 'under500') return p.price < 500;
+        if (priceRange === '500to1500') return p.price >= 500 && p.price <= 1500;
+        if (priceRange === 'above1500') return p.price > 1500;
+        return true;
+      });
+    }
+
+    // Price Sorting (Low to High, High to Low) & Other Sorts
     return [...result].sort((a, b) => {
-      if (sortBy === 'price-asc') return a.price - b.price;
-      if (sortBy === 'price-desc') return b.price - a.price;
+      if (sortBy === 'price-asc') return a.price - b.price; // Low to High
+      if (sortBy === 'price-desc') return b.price - a.price; // High to Low
       if (sortBy === 'rating') return (b.rating || 5) - (a.rating || 5);
       return (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0);
     });
-  }, [scaleModelProducts, searchQuery, sortBy]);
+  }, [scaleModelProducts, searchQuery, priceRange, sortBy]);
 
   const handleToggleWishlist = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
@@ -181,34 +231,162 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
           })}
         </div>
 
-        {/* Controls Bar: Count, Quick Search, Sorting */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-zinc-200/80 mb-8 shadow-xs">
-          <div className="text-xs font-mono text-zinc-500">
-            Showing <strong className="text-zinc-900">{filteredAndSorted.length}</strong> items in <span className="capitalize font-semibold text-zinc-800">{currentSubCollection === 'all' ? 'All Scale Models' : currentSubCollection}</span>
+        {/* Controls Bar: Brand Filters, Price Sorting, Price Range, and Quick Search */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-zinc-200/80 mb-8 shadow-xs space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs font-mono text-zinc-600">
+              <SlidersHorizontal className="w-4 h-4 text-zinc-900 shrink-0" />
+              <span>
+                Showing <strong className="text-zinc-900 font-bold">{filteredAndSorted.length}</strong> items in{' '}
+                <span className="capitalize font-semibold text-zinc-900">
+                  {selectedBrand !== 'all' ? selectedBrand : currentSubCollection === 'all' ? 'All Brands' : currentSubCollection}
+                </span>
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+              {/* Quick Search */}
+              <div className="relative flex-1 sm:w-60 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="Filter casting, model..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="w-full bg-zinc-50 border border-zinc-200 text-xs px-3.5 py-2.5 rounded-xl text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-zinc-900"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => handleSearchChange('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Brand Filter Selector */}
+              <div className="relative shrink-0 flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-xl px-2.5 py-1.5">
+                <Filter className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="text-[11px] font-mono text-zinc-500 uppercase font-bold">Brand:</span>
+                <select
+                  value={selectedBrand}
+                  onChange={(e) => handleBrandChange(e.target.value as any)}
+                  className="bg-transparent text-xs text-zinc-900 font-semibold focus:outline-hidden cursor-pointer"
+                  aria-label="Filter by Brand"
+                >
+                  <option value="all">All Brands</option>
+                  <option value="minigt">Mini GT</option>
+                  <option value="majorette">Majorette</option>
+                  <option value="hotwheels">Hot Wheels</option>
+                  <option value="cca">CCA</option>
+                </select>
+              </div>
+
+              {/* Price Sort Dropdown */}
+              <div className="relative shrink-0 flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-xl px-2.5 py-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="text-[11px] font-mono text-zinc-500 uppercase font-bold">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-transparent text-xs text-zinc-900 font-semibold focus:outline-hidden cursor-pointer"
+                  aria-label="Sort products"
+                >
+                  <option value="price-asc">Price: Low to High (₹)</option>
+                  <option value="price-desc">Price: High to Low (₹)</option>
+                  <option value="featured">Featured First</option>
+                  <option value="rating">Top Customer Rated</option>
+                </select>
+              </div>
+
+              {/* Clear All Filters Button */}
+              {(selectedBrand !== 'all' || priceRange !== 'all' || sortBy !== 'featured' || searchQuery) && (
+                <button
+                  onClick={() => {
+                    handleBrandChange('all');
+                    setPriceRange('all');
+                    setSortBy('featured');
+                    handleSearchChange('');
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 text-xs font-mono text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition cursor-pointer shrink-0"
+                  title="Reset all filters"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder="Filter by casting name or model..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-zinc-50 border border-zinc-200 text-xs px-3.5 py-2 rounded-xl text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-zinc-900 w-full sm:w-64"
-            />
-
-            {/* Sort Dropdown */}
-            <div className="relative shrink-0">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-zinc-50 border border-zinc-200 text-xs px-3 py-2 rounded-xl text-zinc-700 font-medium focus:outline-hidden cursor-pointer"
+          {/* Secondary Quick Filter Pills: Price Tier & Quick Brand Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-100 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-mono uppercase text-zinc-400 font-bold mr-1">Brand Shortcuts:</span>
+              <button
+                onClick={() => handleBrandChange('all')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  selectedBrand === 'all'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
               >
-                <option value="featured">Featured First</option>
-                <option value="price-asc">Price: Low to High</option>
-                <option value="price-desc">Price: High to Low</option>
-                <option value="rating">Top Rated</option>
-              </select>
+                All Brands
+              </button>
+              <button
+                onClick={() => handleBrandChange('minigt')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  selectedBrand === 'minigt'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                Mini GT
+              </button>
+              <button
+                onClick={() => handleBrandChange('majorette')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  selectedBrand === 'majorette'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                Majorette
+              </button>
+              <button
+                onClick={() => handleBrandChange('hotwheels')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  selectedBrand === 'hotwheels'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                Hot Wheels
+              </button>
+            </div>
+
+            {/* Quick Price Bracket Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-mono uppercase text-zinc-400 font-bold mr-1">Price Bracket:</span>
+              {(
+                [
+                  { id: 'all', label: 'All' },
+                  { id: 'under500', label: '< ₹500' },
+                  { id: '500to1500', label: '₹500 - ₹1.5K' },
+                  { id: 'above1500', label: '> ₹1.5K' },
+                ] as const
+              ).map((tier) => (
+                <button
+                  key={tier.id}
+                  onClick={() => setPriceRange(tier.id)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-medium transition cursor-pointer ${
+                    priceRange === tier.id
+                      ? 'bg-zinc-900 text-white'
+                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                  }`}
+                >
+                  {tier.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>

@@ -153,7 +153,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <span>@redline_.garage</span>
               </a>
 
-              <div className="pt-2 flex items-center gap-3">
+              <div className="pt-2 flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => onNavigate('valuescanner')}
                   className="text-[11px] text-sky-400 hover:text-sky-300 font-mono flex items-center gap-1 cursor-pointer font-bold"
@@ -166,6 +166,13 @@ export const Footer: React.FC<FooterProps> = ({
                   className="text-[11px] text-zinc-300 hover:text-red-400 font-mono cursor-pointer flex items-center gap-1 font-bold"
                 >
                   <span>📦 Track Your Order</span>
+                </button>
+                <span className="text-zinc-600">•</span>
+                <button
+                  onClick={() => onNavigate('marketplace')}
+                  className="text-[11px] text-red-400 hover:text-red-300 font-mono cursor-pointer flex items-center gap-1 font-bold"
+                >
+                  <span>🏪 Reseller Marketplace</span>
                 </button>
               </div>
             </div>

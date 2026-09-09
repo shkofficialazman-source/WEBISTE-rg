@@ -1,6 +1,6 @@
 {
   "name": "Redline Garage",
-  "description": "Premium Hot Wheels bouquets, wall art frames, customized photo cards, and scale model car collections.",
+  "description": "Premium Hot Wheels bouquets, wall art frames, customized photo cards, scale models, and peer-to-peer collector reseller marketplace.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

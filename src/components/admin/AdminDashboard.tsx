@@ -103,6 +103,8 @@ import {
   EyeOff,
   Check,
   Copy,
+  Store,
+  MessageSquare,
 } from 'lucide-react';
 import { ImageCropperModal, AspectRatioOption } from './ImageCropperModal';
 import { convertUrlToFile } from '../../utils/imageCropUtils';
@@ -112,6 +114,8 @@ import { CollectorSpotlightTab } from './CollectorSpotlightTab';
 import { ReferralCodesTab } from './ReferralCodesTab';
 import { PromoBannerTab } from './PromoBannerTab';
 import { OrderTrackingTab } from './OrderTrackingTab';
+import { ResellerMarketplaceTab } from './ResellerMarketplaceTab';
+import { MarketplaceChatsTab } from './MarketplaceChatsTab';
 import { OrderStatusChip } from './OrderStatusChip';
 import { InvoiceModal } from '../InvoiceModal';
 import { RedlineLogo } from '../RedlineLogo';
@@ -147,7 +151,7 @@ interface AdminDashboardProps {
   onBackToStore: () => void;
 }
 
-type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'tracking' | 'inventory' | 'referrals' | 'promo' | 'loyalty' | 'spotlight' | 'subscribers';
+type TabType = 'dashboard' | 'products' | 'collections' | 'orders' | 'tracking' | 'inventory' | 'referrals' | 'promo' | 'loyalty' | 'spotlight' | 'subscribers' | 'marketplace' | 'marketplace-chats';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onBackToStore }) => {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -1885,6 +1889,30 @@ If you need any assistance with your shipment, feel free to reply directly to th
             <span>VIP Subscribers</span>
           </button>
 
+          <button
+            onClick={() => setCurrentTab('marketplace')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              currentTab === 'marketplace'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+            }`}
+          >
+            <Store className="w-4 h-4" />
+            <span>Reseller Marketplace</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('marketplace-chats')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              currentTab === 'marketplace-chats'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Marketplace Chats</span>
+          </button>
+
         </div>
       </div>
 
@@ -3354,6 +3382,20 @@ If you need any assistance with your shipment, feel free to reply directly to th
             {/* TAB 8: COLLECTOR SPOTLIGHT */}
             {/* ========================================================= */}
             {currentTab === 'spotlight' && <CollectorSpotlightTab />}
+
+            {/* ========================================================= */}
+            {/* TAB 9: RESELLER MARKETPLACE (P2P Hot Wheels Trading) */}
+            {/* ========================================================= */}
+            {currentTab === 'marketplace' && (
+              <ResellerMarketplaceTab
+                onOpenChatWithListing={() => setCurrentTab('marketplace-chats')}
+              />
+            )}
+
+            {/* ========================================================= */}
+            {/* TAB 10: MARKETPLACE CHATS & ADMIN MODERATION */}
+            {/* ========================================================= */}
+            {currentTab === 'marketplace-chats' && <MarketplaceChatsTab />}
           </>
         )}
       </main>

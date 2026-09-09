@@ -399,3 +399,154 @@ export interface ChatMessage {
   timestamp: string;
   crewMember?: PitCrewRole;
 }
+
+// -------------------------------------------------------------
+// Reseller Marketplace Peer-to-Peer Types
+// -------------------------------------------------------------
+export type ResellerListingStatus = 
+  | 'pending_verification' // Waiting for admin to verify UPI listing fee
+  | 'active'               // Live on Reseller Marketplace
+  | 'sold'                 // Deal completed between buyer and seller
+  | 'expired'              // Auto-expired after duration
+  | 'rejected'             // Payment invalid or item not allowed
+  | 'removed';             // Removed by reseller or admin
+
+export type ResellerCondition =
+  | 'Carded - Mint'
+  | 'Carded - Near Mint'
+  | 'Carded - Soft Corners'
+  | 'Loose - Mint'
+  | 'Loose - Minor Wear'
+  | 'Sealed Box / Multi-pack';
+
+export interface ResellerListing {
+  id: string;
+  reseller_id: string;
+  reseller_name: string;
+  reseller_phone: string;
+  reseller_email?: string;
+  reseller_city?: string;
+  reseller_instagram?: string;
+  is_verified_reseller: boolean;
+
+  car_name: string;
+  casting_model?: string;
+  series: string; // e.g. 'Hot Wheels Mainline', 'Car Culture / Premium', 'Super Treasure Hunt ($TH)', 'Treasure Hunt (TH)', 'RLC Exclusive', 'Mini GT', 'Kaido House', 'Other'
+  scale: string; // e.g. '1:64'
+  condition: ResellerCondition | string;
+  condition_details?: string;
+  asking_price: number; // in INR (₹)
+  photos: string[]; // image URLs
+  description: string;
+
+  status: ResellerListingStatus;
+  listing_fee_amount: number; // e.g. 99
+  listing_fee_status: 'pending' | 'verified' | 'waived' | 'rejected';
+  payment_screenshot_url?: string;
+  payment_utr?: string;
+
+  verified_at?: string;
+  sold_at?: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+
+  views_count?: number;
+  chats_count?: number;
+  reseller_rating?: number;
+  reseller_reviews_count?: number;
+}
+
+export type MarketplaceSenderRole = 'buyer' | 'reseller' | 'admin';
+
+export interface MarketplaceMessage {
+  id: string;
+  listing_id: string;
+  conversation_id: string;
+  sender_role: MarketplaceSenderRole;
+  sender_name: string;
+  sender_contact?: string; // phone / WhatsApp
+  message: string;
+  is_flagged_for_admin: boolean;
+  admin_flag_reason?: string;
+  created_at: string;
+  is_read?: boolean;
+}
+
+export interface MarketplaceConversation {
+  id: string; // unique conversationId
+  listing_id: string;
+  listing_title: string;
+  listing_price: number;
+  listing_image?: string;
+  reseller_name: string;
+  reseller_phone: string;
+  buyer_name: string;
+  buyer_phone: string;
+  has_admin_flag: boolean;
+  admin_flagged_at?: string;
+  admin_flag_resolved?: boolean;
+  last_message?: string;
+  last_message_at?: string;
+  created_at: string;
+}
+
+export interface ResellerReview {
+  id: string;
+  listing_id: string;
+  reseller_id: string;
+  buyer_name: string;
+  buyer_phone?: string;
+  rating: number; // 1 to 5
+  comment: string;
+  created_at: string;
+}
+
+export interface MarketplaceReport {
+  id: string;
+  listing_id?: string;
+  conversation_id?: string;
+  reporter_role: 'buyer' | 'reseller' | 'visitor';
+  reporter_name: string;
+  reporter_phone?: string;
+  reported_item_or_user: string;
+  reason: string;
+  details?: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  created_at: string;
+}
+
+export interface MarketplaceSettings {
+  listing_fee: number; // in INR (default ₹99)
+  listing_duration_days: number; // default 30 days
+  upi_id: string; // default 'shkofficialazman@okhdfcbank'
+  is_marketplace_enabled: boolean;
+  min_asking_price: number;
+}
+
+export interface AdminNotification {
+  id: string;
+  type: 'high_value_listing' | 'admin_mention' | 'listing_fee_submitted';
+  title: string;
+  summary: string;
+  details: {
+    listing_id?: string;
+    car_name?: string;
+    asking_price?: number;
+    reseller_name?: string;
+    reseller_phone?: string;
+    reseller_email?: string;
+    conversation_id?: string;
+    sender_name?: string;
+    sender_role?: string;
+    message_text?: string;
+    [key: string]: any;
+  };
+  recipient_email: string;
+  email_sent: boolean;
+  email_preview_subject?: string;
+  email_html_body?: string;
+  status: 'unread' | 'read' | 'resolved';
+  created_at: string;
+}
+

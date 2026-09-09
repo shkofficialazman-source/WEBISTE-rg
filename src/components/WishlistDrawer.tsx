@@ -95,11 +95,21 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
           </button>
         </div>
 
-        {/* Not Logged In Banner */}
-        {!userProfile && (
+        {/* Logged In vs Not Logged In Banner */}
+        {userProfile ? (
+          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-4 flex items-center justify-between text-xs font-mono shrink-0">
+            <div className="text-emerald-800 text-[11px] leading-tight flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span><strong className="font-bold">Supabase Cloud Vault:</strong> Synced for {userProfile.email}</span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-100/80 px-2 py-0.5 rounded-md">
+              Persistent
+            </span>
+          </div>
+        ) : (
           <div className="bg-amber-50 border-b border-amber-200 p-3 px-4 flex items-center justify-between text-xs font-mono shrink-0">
             <div className="text-amber-800 text-[11px] leading-tight">
-              <span className="font-bold">Sync across devices:</span> Sign in to back up your wishlist!
+              <span className="font-bold">Sync across devices:</span> Sign in to back up your wishlist with Supabase!
             </div>
             {onOpenCustomerLogin && (
               <button
@@ -107,7 +117,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                   onClose();
                   onOpenCustomerLogin();
                 }}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] uppercase px-2.5 py-1 rounded-lg transition shrink-0 ml-2"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] uppercase px-2.5 py-1 rounded-lg transition shrink-0 ml-2 cursor-pointer"
               >
                 Sign In
               </button>

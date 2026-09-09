@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, Menu, X, Package, ChevronDown, Heart, Sparkles, User, LogOut, MessageCircle, Car, Flame, Shield, Flower2, Frame, Truck } from 'lucide-react';
+import { ShoppingBag, Search, Menu, X, Package, ChevronDown, Heart, Sparkles, User, LogOut, MessageCircle, Car, Flame, Shield, Flower2, Frame, Truck, Store } from 'lucide-react';
 import { UserProfile, PitCrewRole } from '../types';
 import { getWishlistIds, subscribeToWishlist } from '../wishlist';
 import { RedlineLogo } from './RedlineLogo';
@@ -46,6 +46,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       setWishlistCount(ids.length);
     });
     return () => unsub();
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.nav-dropdown-wrapper')) {
+        setScaleModelsDropdownOpen(false);
+        setCustomCreationDropdownOpen(false);
+        setIsUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
   const handleLinkClick = (route: string, subParam?: string) => {
@@ -98,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav className="hidden md:flex items-center gap-8 font-mono text-xs font-bold uppercase tracking-widest text-zinc-800">
           {/* Link 1: Scale Models */}
           <div 
-            className="relative"
+            className="relative nav-dropdown-wrapper"
             onMouseEnter={() => setScaleModelsDropdownOpen(true)}
             onMouseLeave={() => setScaleModelsDropdownOpen(false)}
           >
@@ -169,7 +183,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Link 2: Custom Creation */}
           <div 
-            className="relative"
+            className="relative nav-dropdown-wrapper"
             onMouseEnter={() => setCustomCreationDropdownOpen(true)}
             onMouseLeave={() => setCustomCreationDropdownOpen(false)}
           >
@@ -238,6 +252,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Truck className="w-3.5 h-3.5 text-zinc-500" />
             <span>Track Order</span>
           </button>
+
+          {/* Link 4: Reseller Marketplace */}
+          <button 
+            onClick={() => handleLinkClick('marketplace')} 
+            className={`hover:text-red-600 transition-colors cursor-pointer flex items-center gap-1.5 py-2.5 ${
+              currentRoute === 'marketplace' ? 'text-red-600 font-black' : 'text-zinc-900'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5 text-red-600" />
+            <span>Marketplace</span>
+            <span className="px-1.5 py-0.2 bg-red-100 text-red-700 text-[9px] font-bold rounded uppercase tracking-normal">
+              P2P
+            </span>
+          </button>
         </nav>
 
         {/* Right Utility Actions */}
@@ -252,6 +280,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   placeholder="Search casting, GT-R, frame..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (currentRoute !== 'scalemodels') {
+                        handleLinkClick('scalemodels');
+                      }
+                    }
+                  }}
                   className="bg-transparent text-xs text-zinc-900 focus:outline-hidden w-36 sm:w-56 font-sans font-medium"
                   autoFocus
                 />
@@ -291,7 +326,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Customer Account Button */}
           {userProfile ? (
-            <div className="relative">
+            <div className="relative nav-dropdown-wrapper">
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
                 className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 px-3 py-2 rounded-xl text-xs font-mono font-bold text-zinc-800 transition-all cursor-pointer"
@@ -390,6 +425,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               placeholder="Search castings, sets, frames..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setIsMobileMenuOpen(false);
+                  if (currentRoute !== 'scalemodels') {
+                    handleLinkClick('scalemodels');
+                  }
+                }
+              }}
               className="w-full bg-zinc-100 border border-zinc-300 text-zinc-900 rounded-xl px-4 py-2.5 text-sm focus:border-zinc-900 focus:outline-hidden"
             />
           </div>
@@ -452,6 +495,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Truck className="w-4 h-4 text-red-600" />
               <span>Track Your Order</span>
+            </button>
+
+            <button 
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                handleLinkClick('marketplace');
+              }} 
+              className="text-left text-zinc-800 hover:text-red-600 py-2.5 flex items-center justify-between border-b border-zinc-100 font-mono text-xs uppercase tracking-wider font-bold cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-red-600" />
+                <span>Reseller Marketplace</span>
+              </div>
+              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded">P2P</span>
             </button>
           </div>
 

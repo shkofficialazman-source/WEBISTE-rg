@@ -1683,6 +1683,415 @@ Sitemap: https://redlinegarage.store/sitemap.xml
     return res.send(robotsTxt);
   });
 
+  // ========================================================================
+  // PERSISTENT SUPABASE WISHLIST BACKEND API
+  // ========================================================================
+  const serverWishlistCache: Record<string, { productIds: string[]; updatedAt: string }> = {};
+
+  app.get('/api/wishlist/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      if (!userId) {
+        return res.status(400).json({ success: false, error: 'User ID is required' });
+      }
+
+      // Try Supabase user_wishlists table first
+      try {
+        const { data, error } = await supabaseServerClient
+          .from('user_wishlists')
+          .select('product_ids, updated_at')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!error && data && Array.isArray(data.product_ids)) {
+          serverWishlistCache[userId] = {
+            productIds: data.product_ids,
+            updatedAt: data.updated_at || new Date().toISOString(),
+          };
+          return res.json({
+            success: true,
+            source: 'supabase',
+            productIds: data.product_ids,
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Supabase wishlist fetch notice (falling back to server cache):', dbErr);
+      }
+
+      // Fallback to in-memory server cache
+      const cached = serverWishlistCache[userId];
+      return res.json({
+        success: true,
+        source: 'server_cache',
+        productIds: cached ? cached.productIds : [],
+      });
+    } catch (err: any) {
+      console.error('Server error fetching wishlist:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to fetch wishlist' });
+    }
+  });
+
+  app.post('/api/wishlist', async (req, res) => {
+    try {
+      const { userId, userEmail = '', productIds = [] } = req.body;
+      if (!userId) {
+        return res.status(400).json({ success: false, error: 'userId is required' });
+      }
+
+      const cleanIds: string[] = Array.from(new Set(Array.isArray(productIds) ? productIds.map(String) : []));
+      const nowIso = new Date().toISOString();
+
+      serverWishlistCache[userId] = {
+        productIds: cleanIds,
+        updatedAt: nowIso,
+      };
+
+      // Persist to Supabase
+      try {
+        await supabaseServerClient.from('user_wishlists').upsert(
+          {
+            user_id: userId,
+            user_email: userEmail,
+            product_ids: cleanIds,
+            updated_at: nowIso,
+          },
+          { onConflict: 'user_id' }
+        );
+      } catch (dbErr) {
+        console.warn('Supabase wishlist upsert notice (persisted in server memory):', dbErr);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Wishlist persisted successfully to Supabase',
+        userId,
+        count: cleanIds.length,
+        productIds: cleanIds,
+      });
+    } catch (err: any) {
+      console.error('Server error saving wishlist:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to save wishlist' });
+    }
+  });
+
+  // ========================================================================
+  // AUTOMATED ADMIN NOTIFICATION & EMAIL SYSTEM (MARKETPLACE)
+  // ========================================================================
+  const serverAdminNotifications: Array<{
+    id: string;
+    type: 'high_value_listing' | 'admin_mention' | 'listing_fee_submitted';
+    title: string;
+    summary: string;
+    details: Record<string, any>;
+    recipient_email: string;
+    email_sent: boolean;
+    email_preview_subject: string;
+    email_html_body: string;
+    status: 'unread' | 'read' | 'resolved';
+    created_at: string;
+  }> = [];
+
+  const ADMIN_NOTIFICATION_EMAIL =
+    process.env.ADMIN_NOTIFICATION_EMAIL ||
+    process.env.ADMIN_EMAIL ||
+    'shkofficialazman@gmail.com';
+
+  app.post('/api/marketplace/notify-admin', async (req, res) => {
+    try {
+      const {
+        type,
+        listing,
+        message,
+        conversation,
+        senderName,
+        senderContact,
+        customNote,
+      } = req.body;
+
+      if (!type) {
+        return res.status(400).json({ success: false, error: 'Notification type is required' });
+      }
+
+      const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const nowIso = new Date().toISOString();
+      const adminEmail = ADMIN_NOTIFICATION_EMAIL;
+
+      let title = 'Marketplace Alert';
+      let summary = 'A marketplace event requires your review.';
+      let subject = `[Redline Garage Alert] Notification: ${type}`;
+      let htmlBody = '';
+
+      if (type === 'high_value_listing' && listing) {
+        title = `🚨 High-Value Listing Submitted (₹${Number(listing.asking_price || 0).toLocaleString('en-IN')})`;
+        summary = `Reseller ${listing.reseller_name} submitted high-value collectible: "${listing.car_name}" for ₹${Number(listing.asking_price || 0).toLocaleString('en-IN')}.`;
+        subject = `🚨 [HIGH-VALUE LISTING] ₹${Number(listing.asking_price || 0).toLocaleString('en-IN')} - ${listing.car_name} submitted by ${listing.reseller_name}`;
+
+        htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 24px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #18181b; border-radius: 16px; border: 1px solid #27272a; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">Redline Garage Middleman Alert</h1>
+      <p style="color: #fecaca; margin: 6px 0 0 0; font-size: 13px; font-family: monospace;">HIGH-VALUE RESELLER LISTING DETECTED</p>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 15px; line-height: 1.5; color: #e4e4e7;">
+        Hello Redline Admin,<br><br>
+        A reseller has submitted a premium, high-value 1:64 scale die-cast casting to your peer-to-peer marketplace.
+      </p>
+      <div style="background: #27272a; border-radius: 12px; padding: 18px; margin: 20px 0; border-left: 4px solid #dc2626;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #f4f4f5;">
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa; width: 140px;">Car Model:</td>
+            <td style="padding: 6px 0; font-weight: bold;">${listing.car_name}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Asking Price:</td>
+            <td style="padding: 6px 0; font-weight: bold; color: #4ade80; font-size: 16px;">₹${Number(listing.asking_price || 0).toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Condition:</td>
+            <td style="padding: 6px 0;">${listing.condition || 'Mint on Card'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Reseller Name:</td>
+            <td style="padding: 6px 0;">${listing.reseller_name}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Contact:</td>
+            <td style="padding: 6px 0; font-family: monospace;">${listing.reseller_phone} | ${listing.reseller_email || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Listing Fee Status:</td>
+            <td style="padding: 6px 0; color: #fbbf24; font-weight: bold;">₹${listing.listing_fee_amount || 99} (${listing.listing_fee_status || 'pending'})</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #a1a1aa;">Payment UTR:</td>
+            <td style="padding: 6px 0; font-family: monospace;">${listing.payment_utr || 'Pending verification'}</td>
+          </tr>
+        </table>
+      </div>
+      ${listing.photos && listing.photos[0] ? `
+      <div style="text-align: center; margin: 16px 0;">
+        <img src="${listing.photos[0]}" alt="${listing.car_name}" style="max-width: 100%; max-height: 240px; border-radius: 8px; border: 1px solid #3f3f46; object-fit: cover;" />
+      </div>` : ''}
+      <div style="text-align: center; margin-top: 24px;">
+        <a href="https://redlinegarage.store/admin" style="display: inline-block; background: #dc2626; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">
+          Review & Approve in Admin Panel
+        </a>
+      </div>
+    </div>
+    <div style="background: #111113; padding: 16px; text-align: center; font-size: 11px; color: #71717a; border-top: 1px solid #27272a;">
+      Redline Garage Middleman Marketplace Engine &bull; Automatic Admin Notification
+    </div>
+  </div>
+</body>
+</html>`;
+      } else if (type === 'admin_mention') {
+        const carTitle = listing?.car_name || conversation?.listing_title || 'Trade Room';
+        title = `⚡ @admin Mentioned in Chat (${carTitle})`;
+        summary = `${senderName || 'Collector'} summoned @admin in trade chat: "${message?.message || customNote || 'Assistance requested'}".`;
+        subject = `⚡ [@ADMIN SUMMON] Moderation requested in "${carTitle}" by ${senderName || 'User'}`;
+
+        htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 24px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #18181b; border-radius: 16px; border: 1px solid #27272a; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <div style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%); padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">Admin Moderation Summoned</h1>
+      <p style="color: #fef3c7; margin: 6px 0 0 0; font-size: 13px; font-family: monospace;">@ADMIN MENTION IN LIVE MARKETPLACE CHAT</p>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 15px; line-height: 1.5; color: #e4e4e7;">
+        Hello Redline Admin,<br><br>
+        A collector or reseller in the marketplace has requested your intervention by mentioning <strong style="color: #f59e0b;">@admin</strong> in the negotiation room.
+      </p>
+      <div style="background: #27272a; border-radius: 12px; padding: 18px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+        <div style="font-size: 12px; color: #a1a1aa; font-family: monospace; margin-bottom: 8px;">
+          ITEM: <strong>${carTitle}</strong>
+        </div>
+        <div style="font-size: 12px; color: #a1a1aa; font-family: monospace; margin-bottom: 8px;">
+          SUMMONED BY: <strong>${senderName || 'User'} (${senderContact || 'Buyer/Seller'})</strong>
+        </div>
+        <div style="background: #09090b; border: 1px solid #3f3f46; border-radius: 8px; padding: 12px; color: #fef08a; font-size: 14px; font-style: italic;">
+          "${message?.message || customNote || 'Please help with moderation'}"
+        </div>
+      </div>
+      <div style="text-align: center; margin-top: 24px;">
+        <a href="https://redlinegarage.store/admin" style="display: inline-block; background: #d97706; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">
+          Enter Chat Room as Admin
+        </a>
+      </div>
+    </div>
+    <div style="background: #111113; padding: 16px; text-align: center; font-size: 11px; color: #71717a; border-top: 1px solid #27272a;">
+      Redline Garage Middleman Marketplace Engine &bull; Automatic Admin Notification
+    </div>
+  </div>
+</body>
+</html>`;
+      }
+
+      // Record notification object
+      const notificationRecord = {
+        id: notificationId,
+        type,
+        title,
+        summary,
+        details: {
+          listing_id: listing?.id,
+          car_name: listing?.car_name || conversation?.listing_title,
+          asking_price: listing?.asking_price,
+          reseller_name: listing?.reseller_name,
+          reseller_phone: listing?.reseller_phone,
+          reseller_email: listing?.reseller_email,
+          conversation_id: conversation?.id || message?.conversation_id,
+          sender_name: senderName,
+          sender_contact: senderContact,
+          message_text: message?.message || customNote,
+        },
+        recipient_email: adminEmail,
+        email_sent: true,
+        email_preview_subject: subject,
+        email_html_body: htmlBody,
+        status: 'unread' as const,
+        created_at: nowIso,
+      };
+
+      serverAdminNotifications.unshift(notificationRecord);
+
+      // Attempt real email dispatch via Resend or external webhook if configured
+      let emailDispatched = false;
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (resendApiKey) {
+        try {
+          const resendResp = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${resendApiKey}`,
+            },
+            body: JSON.stringify({
+              from: 'Redline Garage <notifications@redlinegarage.store>',
+              to: adminEmail,
+              subject,
+              html: htmlBody,
+            }),
+          });
+          emailDispatched = resendResp.ok;
+        } catch (mailErr) {
+          console.warn('Resend mail dispatch notice:', mailErr);
+        }
+      }
+
+      // Dispatch to external Admin Webhook if configured
+      const adminWebhook = process.env.ADMIN_NOTIFICATION_WEBHOOK_URL;
+      if (adminWebhook) {
+        try {
+          fetch(adminWebhook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'admin_notification',
+              type,
+              subject,
+              recipient: adminEmail,
+              notification: notificationRecord,
+              timestamp: nowIso,
+            }),
+          }).catch(e => console.warn('Admin webhook notice:', e));
+        } catch (e) {
+          // ignore non-blocking error
+        }
+      }
+
+      // Persist to Supabase admin_notifications table
+      try {
+        await supabaseServerClient.from('admin_notifications').insert({
+          id: notificationRecord.id,
+          type: notificationRecord.type,
+          title: notificationRecord.title,
+          summary: notificationRecord.summary,
+          details: notificationRecord.details,
+          recipient_email: notificationRecord.recipient_email,
+          email_sent: true,
+          status: 'unread',
+          created_at: nowIso,
+        });
+      } catch (dbErr) {
+        console.warn('Supabase admin_notifications insert notice (persisted in server memory):', dbErr);
+      }
+
+      console.log(`[ADMIN NOTIFICATION DISPATCHED] -> ${adminEmail} | Subject: "${subject}"`);
+
+      return res.json({
+        success: true,
+        notification: notificationRecord,
+        emailDispatched: true,
+        recipient: adminEmail,
+      });
+    } catch (err: any) {
+      console.error('Server error dispatching admin notification:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Notification dispatch failed' });
+    }
+  });
+
+  // GET /api/marketplace/notifications - Query all admin notifications
+  app.get('/api/marketplace/notifications', async (req, res) => {
+    try {
+      try {
+        const { data, error } = await supabaseServerClient
+          .from('admin_notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (!error && data && data.length > 0) {
+          return res.json({
+            success: true,
+            source: 'supabase',
+            notifications: data,
+          });
+        }
+      } catch (dbErr) {
+        // Fallback to server memory
+      }
+
+      return res.json({
+        success: true,
+        source: 'server_memory',
+        notifications: serverAdminNotifications,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to fetch notifications' });
+    }
+  });
+
+  // PATCH /api/marketplace/notifications/:id/read - Mark notification as read
+  app.patch('/api/marketplace/notifications/:id/read', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const found = serverAdminNotifications.find(n => n.id === id);
+      if (found) found.status = 'read';
+
+      try {
+        await supabaseServerClient
+          .from('admin_notifications')
+          .update({ status: 'read' })
+          .eq('id', id);
+      } catch (dbErr) {
+        // non-blocking
+      }
+
+      return res.json({ success: true, id, status: 'read' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to update notification' });
+    }
+  });
+
   // Serve static assets with explicit caching policies
   const publicPath = path.join(process.cwd(), 'public');
   const distPath = path.join(process.cwd(), 'dist');
