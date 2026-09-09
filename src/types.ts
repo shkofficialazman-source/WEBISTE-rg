@@ -252,6 +252,7 @@ export interface InvoiceData {
   paymentScreenshotUrl?: string;
   aiVerification?: AiPaymentVerification;
   aiVerificationSummary?: string;
+  paymentUtr?: string;
 }
 
 export interface FirestoreOrder {
@@ -267,6 +268,8 @@ export interface FirestoreOrder {
   shipping: number;
   total: number;
   paymentMethod: string;
+  paymentUtr?: string;
+  payment_utr?: string;
   paymentScreenshotUrl?: string;
   payment_screenshot_url?: string;
   aiVerification?: AiPaymentVerification;

@@ -5,7 +5,7 @@ import {
   X, Trash2, Plus, Minus, ShoppingBag, CheckCircle2, ArrowRight, Cloud, 
   MessageCircle, Copy, Check, Smartphone, ChevronLeft, AlertCircle, 
   Tag, Award, Sparkles, Send, ShieldAlert, ShieldCheck, Upload, Image as ImageIcon,
-  Camera, RefreshCw, Eye, Gift, Percent
+  Camera, RefreshCw, Eye, Gift, Percent, Receipt
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { saveOrderToFirestore } from '../firebase';
@@ -46,6 +46,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [qrImgError, setQrImgError] = useState(false);
 
   // Payment Screenshot & AI Verification State
+  const [paymentUtr, setPaymentUtr] = useState('');
   const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null);
   const [isAnalyzingScreenshot, setIsAnalyzingScreenshot] = useState(false);
   const [aiVerificationResult, setAiVerificationResult] = useState<AiPaymentVerification | null>(null);
@@ -169,6 +170,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       const json = await response.json();
       if (json.success && json.data) {
         setAiVerificationResult(json.data);
+        if (json.data.utrReference && !paymentUtr) {
+          setPaymentUtr(json.data.utrReference.trim());
+        }
       } else {
         // Fallback friendly verification object
         setAiVerificationResult({
@@ -443,6 +447,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsSubmitting(true);
     setFormError('');
 
+    const cleanUtr = paymentUtr.trim();
     const orderPayload = {
       orderNumber,
       customerName: customerName.trim(),
@@ -460,7 +465,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       subtotal,
       shipping: 0,
       total: grandTotal,
-      paymentMethod: chosenPaymentMethod === 'UPI' ? 'UPI' : 'WhatsApp / COD',
+      paymentMethod: chosenPaymentMethod === 'UPI' 
+        ? (cleanUtr ? `UPI (UTR: ${cleanUtr})` : 'UPI') 
+        : 'WhatsApp / COD',
+      paymentUtr: cleanUtr || undefined,
+      payment_utr: cleanUtr || undefined,
       paymentScreenshotUrl: screenshotDataUrl || undefined,
       aiVerification: aiVerificationResult || undefined,
       referralCode: appliedReferralCode?.code || undefined,
@@ -543,7 +552,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
 
     const paymentStatusLine = chosenPaymentMethod === 'UPI'
-      ? `*PAYMENT METHOD:* 💳 UPI Paid (₹${grandTotal.toFixed(2)} to ${UPI_ID}) — [Screenshot Attached for Admin Verification]`
+      ? `*PAYMENT METHOD:* 💳 UPI Paid (₹${grandTotal.toFixed(2)} to ${UPI_ID})${cleanUtr ? `\n*UTR / TXN REF:* 🔢 ${cleanUtr}` : ''} — [Attached for Admin Verification]`
       : `*PAYMENT METHOD:* 💬 Pay via WhatsApp / Cash on Delivery (₹${grandTotal.toFixed(2)})`;
 
     const whatsappMessage = encodeURIComponent(
@@ -1151,6 +1160,57 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 Scan with Google Pay, PhonePe, Paytm, BHIM, or any UPI app to pay ₹{grandTotal.toFixed(2)}.
               </p>
 
+              {/* UTR TRANSACTION REFERENCE & BANK REF BOX */}
+              <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 uppercase font-mono">
+                    <Receipt className="w-4 h-4 text-red-600" />
+                    <span>Enter 12-Digit UTR / Transaction ID</span>
+                  </div>
+                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${
+                    paymentUtr.length >= 12
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-zinc-200 text-zinc-700'
+                  }`}>
+                    {paymentUtr.length >= 12 ? '✓ UTR Verified' : 'Fast-Track'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-zinc-600 font-sans leading-normal">
+                  After paying ₹{grandTotal.toFixed(2)}, enter the 12-digit UTR or UPI Transaction Reference number from Google Pay, PhonePe, Paytm, BHIM, or your bank app.
+                </p>
+
+                <div className="space-y-1.5">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      maxLength={22}
+                      value={paymentUtr}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '');
+                        setPaymentUtr(val);
+                      }}
+                      placeholder="e.g. 428192849201"
+                      className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-mono font-bold tracking-wider placeholder:text-zinc-400 placeholder:font-normal focus:outline-hidden transition ${
+                        paymentUtr.length >= 12
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950'
+                          : 'border-zinc-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 text-zinc-900'
+                      }`}
+                    />
+                    {paymentUtr.length >= 12 && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] font-mono text-emerald-600 font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Valid UTR</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-zinc-400 font-mono">
+                    <span>Google Pay / PhonePe / Paytm / Cred Ref No</span>
+                    <span>{paymentUtr.length} chars</span>
+                  </div>
+                </div>
+              </div>
+
               {/* AI PAYMENT SCREENSHOT VERIFICATION BOX */}
               <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 text-left space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
@@ -1398,7 +1458,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 className="w-full bg-red-600 hover:bg-red-500 text-white font-extrabold py-3.5 rounded-xl text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
                 <CheckCircle2 className="w-4 h-4 fill-white text-red-600" />
-                <span>{isSubmitting ? 'Saving Order...' : "I've Paid — Confirm Order"}</span>
+                <span>
+                  {isSubmitting
+                    ? 'Saving Order...'
+                    : paymentUtr.trim()
+                    ? "I've Paid with UTR — Confirm Order"
+                    : "I've Paid — Confirm Order"}
+                </span>
               </button>
 
               <button

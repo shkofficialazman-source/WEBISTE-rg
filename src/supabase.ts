@@ -116,7 +116,15 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
       return [];
     }
 
-    return data.map((item: any) => {
+    // Exclude any peer-to-peer reseller marketplace items from the store products catalog
+    const nonMarketplaceData = data.filter((item: any) => {
+      const idStr = String(item.id || '').toLowerCase();
+      const cat = String(item.category || '').toLowerCase();
+      const col = String(item.collection_id || item.collectionId || '').toLowerCase();
+      return !idStr.startsWith('reseller_') && !idStr.startsWith('market_') && cat !== 'marketplace' && col !== 'marketplace' && item.is_marketplace !== true && item.source !== 'marketplace';
+    });
+
+    return nonMarketplaceData.map((item: any) => {
       let rawCat = (item.category || '').toLowerCase();
       const rawName = (item.name || '').toLowerCase();
       let primaryCol = item.collection_id || item.collectionId || item.collector_specs?.collection_id || '';
@@ -529,6 +537,8 @@ export const saveOrderToSupabase = async (orderData: {
   shipping: number;
   total: number;
   paymentMethod: string;
+  paymentUtr?: string;
+  payment_utr?: string;
   paymentScreenshotUrl?: string;
   aiVerification?: any;
   giftNote?: string;
@@ -567,6 +577,8 @@ export const saveOrderToSupabase = async (orderData: {
     shipping: Number(orderData.shipping || 0),
     total: Number(orderData.total || 0),
     paymentMethod: orderData.paymentMethod || 'WhatsApp',
+    paymentUtr: orderData.paymentUtr || orderData.payment_utr || undefined,
+    payment_utr: orderData.paymentUtr || orderData.payment_utr || undefined,
     paymentScreenshotUrl: orderData.paymentScreenshotUrl,
     aiVerification: orderData.aiVerification,
     giftNote: orderData.giftNote,
@@ -636,6 +648,7 @@ export const saveOrderToSupabase = async (orderData: {
       shipping: Number(orderData.shipping || 0),
       total: Number(orderData.total || 0),
       payment_method: orderData.paymentMethod || 'WhatsApp',
+      payment_utr: orderData.paymentUtr || orderData.payment_utr || null,
       payment_screenshot_url: orderData.paymentScreenshotUrl || null,
       ai_verification: orderData.aiVerification || null,
       gift_note: orderData.giftNote || null,
@@ -706,6 +719,8 @@ export const fetchOrdersFromSupabase = async (): Promise<FirestoreOrder[]> => {
       shipping: Number(item.shipping || 0),
       total: Number(item.total || 0),
       paymentMethod: item.payment_method || item.paymentMethod || 'WhatsApp / COD',
+      paymentUtr: item.payment_utr || item.paymentUtr || undefined,
+      payment_utr: item.payment_utr || item.paymentUtr || undefined,
       paymentScreenshotUrl: item.payment_screenshot_url || item.paymentScreenshotUrl || undefined,
       aiVerification: item.ai_verification || item.aiVerification || undefined,
       giftNote: item.gift_note || item.giftNote || undefined,

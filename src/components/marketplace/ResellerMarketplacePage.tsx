@@ -28,11 +28,13 @@ import {
   getMarketplaceListings,
   getOrCreateConversation,
   getMarketplaceSettings,
+  getMarketplaceConversations,
 } from '../../marketplace';
 import { ResellerListingModal } from './ResellerListingModal';
 import { MarketplaceChatModal } from './MarketplaceChatModal';
 import { MarketplaceReportModal } from './MarketplaceReportModal';
 import { ResellerReviewModal } from './ResellerReviewModal';
+import { MarketplaceMessagesInboxModal } from './MarketplaceMessagesInboxModal';
 
 interface ResellerMarketplacePageProps {
   onNavigateHome?: () => void;
@@ -44,6 +46,7 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
   const [listings, setListings] = useState<ResellerListing[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [listingFee, setListingFee] = useState(99);
+  const [conversationsCount, setConversationsCount] = useState(0);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,9 +58,11 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
 
   // Modals state
   const [isListingModalOpen, setIsListingModalOpen] = useState(false);
+  const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
   const [activeChatListing, setActiveChatListing] = useState<ResellerListing | null>(null);
   const [activeConversation, setActiveConversation] = useState<MarketplaceConversation | null>(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [chatUserRole, setChatUserRole] = useState<'buyer' | 'reseller'>('buyer');
 
   // Buyer Info Prompt before chat (to associate conversation)
   const [isBuyerInfoModalOpen, setIsBuyerInfoModalOpen] = useState(false);
@@ -82,12 +87,14 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
   const loadMarketplaceData = async () => {
     setIsLoading(true);
     try {
-      const [data, settings] = await Promise.all([
+      const [data, settings, convs] = await Promise.all([
         getMarketplaceListings(),
         getMarketplaceSettings(),
+        getMarketplaceConversations().catch(() => []),
       ]);
       setListings(data);
       setListingFee(settings.listing_fee || 99);
+      setConversationsCount(convs.length);
     } catch (err) {
       console.error(err);
     } finally {
@@ -232,6 +239,19 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
               >
                 <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
                 <span>Sell on Redline Garage (₹{listingFee})</span>
+              </button>
+
+              <button
+                onClick={() => setIsMessagesModalOpen(true)}
+                className="px-5 py-3.5 bg-zinc-950 hover:bg-zinc-800 text-white rounded-2xl font-mono text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer group"
+              >
+                <MessageSquare className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
+                <span>Messages</span>
+                {conversationsCount > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                    {conversationsCount}
+                  </span>
+                )}
               </button>
 
               <div className="bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 flex items-center gap-4 text-xs font-mono">
@@ -606,12 +626,21 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
             setIsChatModalOpen(false);
             setActiveChatListing(null);
             setActiveConversation(null);
+            loadMarketplaceData();
           }}
           listing={activeChatListing}
           conversation={activeConversation}
-          currentUserRole="buyer"
-          currentUserName={buyerName || 'Collector'}
-          currentUserContact={buyerPhone || ''}
+          currentUserRole={chatUserRole}
+          currentUserName={
+            chatUserRole === 'reseller'
+              ? (activeConversation.reseller_name || buyerName || 'Seller')
+              : (buyerName || activeConversation.buyer_name || 'Collector')
+          }
+          currentUserContact={
+            chatUserRole === 'reseller'
+              ? (activeConversation.reseller_phone || buyerPhone || '')
+              : (buyerPhone || activeConversation.buyer_phone || '')
+          }
           onOpenReportModal={(lid, cid) => {
             setReportModalData({
               isOpen: true,
@@ -622,6 +651,28 @@ export const ResellerMarketplacePage: React.FC<ResellerMarketplacePageProps> = (
           }}
         />
       )}
+
+      {/* MODAL: Messages Inbox */}
+      <MarketplaceMessagesInboxModal
+        isOpen={isMessagesModalOpen}
+        onClose={() => setIsMessagesModalOpen(false)}
+        listings={listings}
+        onOpenConversation={(conv, listing, role) => {
+          setIsMessagesModalOpen(false);
+          setActiveConversation(conv);
+          setActiveChatListing(listing);
+          setChatUserRole(role);
+          setIsChatModalOpen(true);
+        }}
+        currentUserName={buyerName}
+        currentUserPhone={buyerPhone}
+        onUpdateUserInfo={(name, phone) => {
+          setBuyerName(name);
+          setBuyerPhone(phone);
+          localStorage.setItem('redline_buyer_name', name);
+          localStorage.setItem('redline_buyer_phone', phone);
+        }}
+      />
 
       {/* MODAL: Report */}
       <MarketplaceReportModal

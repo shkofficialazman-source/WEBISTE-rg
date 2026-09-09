@@ -22,14 +22,28 @@ export const HomeSpotlightSection: React.FC<HomeSpotlightSectionProps> = ({
 }) => {
   const [wishlistVersion, setWishlistVersion] = React.useState(0);
 
-  // Pick 4-6 spotlight items (prioritize isBestSeller, then top items)
+  // Pick 4-6 spotlight items (strictly official store products, excluding marketplace)
   const spotlightProducts = React.useMemo(() => {
-    const bestSellers = products.filter(p => p.isBestSeller);
+    const validStoreProducts = products.filter(p => {
+      if (!p) return false;
+      const id = String(p.id || '').toLowerCase();
+      const cat = String(p.category || '').toLowerCase();
+      const colId = String(p.collectionId || (p as any).collection_id || '').toLowerCase();
+      const colIds = ((p as any).collectionIds || []).map((c: string) => String(c).toLowerCase());
+      const isMkt = (p as any).isMarketplace === true || (p as any).source === 'marketplace' || (p as any).is_marketplace === true;
+
+      if (id.startsWith('reseller') || id.startsWith('market_') || id.startsWith('mkt_')) return false;
+      if (cat === 'marketplace' || colId === 'marketplace' || colIds.includes('marketplace')) return false;
+      if (isMkt) return false;
+      return true;
+    });
+
+    const bestSellers = validStoreProducts.filter(p => p.isBestSeller);
     if (bestSellers.length >= 4) {
       return bestSellers.slice(0, 4);
     }
     // Fill up to 4 items with other products
-    const remaining = products.filter(p => !p.isBestSeller);
+    const remaining = validStoreProducts.filter(p => !p.isBestSeller);
     return [...bestSellers, ...remaining].slice(0, 4);
   }, [products]);
 

@@ -43,11 +43,23 @@ export const FeaturedHotWheelsSection: React.FC<FeaturedHotWheelsSectionProps> =
     setTimeout(() => setAddedProductId(null), 1800);
   };
 
-  // Filter products based on Hot Wheels categories & collector series
+  // Filter products based on Hot Wheels categories & collector series (strictly official store inventory)
   const filteredProducts = useMemo(() => {
     if (!products || products.length === 0) return [];
 
-    let list = [...products];
+    let list = products.filter(p => {
+      if (!p) return false;
+      const id = String(p.id || '').toLowerCase();
+      const cat = String(p.category || '').toLowerCase();
+      const colId = String(p.collectionId || (p as any).collection_id || '').toLowerCase();
+      const colIds = ((p as any).collectionIds || []).map((c: string) => String(c).toLowerCase());
+      const isMkt = (p as any).isMarketplace === true || (p as any).source === 'marketplace' || (p as any).is_marketplace === true;
+
+      if (id.startsWith('reseller') || id.startsWith('market_') || id.startsWith('mkt_')) return false;
+      if (cat === 'marketplace' || colId === 'marketplace' || colIds.includes('marketplace')) return false;
+      if (isMkt) return false;
+      return true;
+    });
 
     if (activeFilter === 'mainline') {
       list = list.filter((p) => {

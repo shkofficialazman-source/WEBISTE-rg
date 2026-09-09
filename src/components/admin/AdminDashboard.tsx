@@ -2967,6 +2967,26 @@ If you need any assistance with your shipment, feel free to reply directly to th
                                     Payment: {order.paymentMethod || 'WhatsApp / COD'}
                                   </div>
 
+                                  {(order.paymentUtr || (order as any).payment_utr) && (
+                                    <div className="mt-1 flex items-center gap-1 bg-red-50 border border-red-200/80 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-800 w-fit">
+                                      <span className="text-zinc-500 font-bold">UTR:</span>
+                                      <span className="font-extrabold text-red-700 tracking-wider">
+                                        {order.paymentUtr || (order as any).payment_utr}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText(order.paymentUtr || (order as any).payment_utr || '');
+                                        }}
+                                        title="Copy UTR Reference"
+                                        className="text-zinc-400 hover:text-red-700 transition cursor-pointer ml-0.5 p-0.5"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+
                                   {/* AI Payment Verification & Screenshot Badge */}
                                   {order.paymentScreenshotUrl ? (
                                     <div className="mt-2">
@@ -4729,6 +4749,32 @@ If you need any assistance with your shipment, feel free to reply directly to th
 
               {/* Right Column: AI Analysis Verdict */}
               <div className="space-y-3 font-sans">
+                {/* Customer Provided UTR Section */}
+                {(inspectingVerificationOrder.paymentUtr || (inspectingVerificationOrder as any).payment_utr) && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-3.5 flex items-center justify-between shadow-2xs">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-red-700 tracking-wider font-mono">
+                        Customer Entered UTR / Ref No
+                      </div>
+                      <div className="text-sm font-mono font-black text-red-950 tracking-wider mt-0.5 select-all">
+                        {inspectingVerificationOrder.paymentUtr || (inspectingVerificationOrder as any).payment_utr}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          inspectingVerificationOrder.paymentUtr || (inspectingVerificationOrder as any).payment_utr || ''
+                        );
+                      }}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider font-mono">
                   Gemini AI Forensic Verdict
                 </div>

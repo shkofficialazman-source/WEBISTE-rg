@@ -43,7 +43,26 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onSelectProduct,
   onNavigate,
 }) => {
-  const showroomPool = products.length > 0 ? products : heroProduct ? [heroProduct] : [DEFAULT_SHOWCASE_ITEM];
+  // Strictly filter out any peer-to-peer marketplace items from the official showroom / featured casting pool
+  const showroomPool = React.useMemo(() => {
+    const rawPool = products.length > 0 ? products : heroProduct ? [heroProduct] : [DEFAULT_SHOWCASE_ITEM];
+    const filtered = rawPool.filter(p => {
+      if (!p) return false;
+      const id = String(p.id || '').toLowerCase();
+      const cat = String(p.category || '').toLowerCase();
+      const colId = String(p.collectionId || (p as any).collection_id || '').toLowerCase();
+      const colIds = ((p as any).collectionIds || []).map((c: string) => String(c).toLowerCase());
+      const isMkt = (p as any).isMarketplace === true || (p as any).source === 'marketplace' || (p as any).is_marketplace === true;
+
+      if (id.startsWith('reseller') || id.startsWith('market_') || id.startsWith('mkt_')) return false;
+      if (cat === 'marketplace' || colId === 'marketplace' || colIds.includes('marketplace')) return false;
+      if (isMkt) return false;
+      return true;
+    });
+
+    return filtered.length > 0 ? filtered : [DEFAULT_SHOWCASE_ITEM];
+  }, [products, heroProduct]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
