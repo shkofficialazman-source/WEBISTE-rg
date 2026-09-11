@@ -166,11 +166,11 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
         (typeof item.photoUrl === 'string' && item.photoUrl.trim()) ||
         (Array.isArray(item.gallery_images) && typeof item.gallery_images[0] === 'string' && item.gallery_images[0].trim()) ||
         (Array.isArray(item.galleryImages) && typeof item.galleryImages[0] === 'string' && item.galleryImages[0].trim()) ||
-        'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?q=80&w=800&auto=format&fit=crop';
+        '';
 
       const galleryList = Array.isArray(item.gallery_images) && item.gallery_images.length > 0
         ? item.gallery_images
-        : (Array.isArray(item.galleryImages) && item.galleryImages.length > 0 ? item.galleryImages : [rawImage]);
+        : (Array.isArray(item.galleryImages) && item.galleryImages.length > 0 ? item.galleryImages : (rawImage ? [rawImage] : []));
 
       return {
         id: String(item.id || item.product_id || `prod-${Math.random().toString(36).substr(2, 6)}`),
@@ -1623,8 +1623,8 @@ export const addCollectionToSupabase = async (
     slug: cleanSlug,
     description: collection.description?.trim() || collection.tagline?.trim() || '',
     tagline: collection.tagline?.trim() || collection.description?.trim() || '',
-    cover_image_url: collection.coverImageUrl || collection.image || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
-    image: collection.coverImageUrl || collection.image || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
+    cover_image_url: collection.coverImageUrl || collection.image || '',
+    image: collection.coverImageUrl || collection.image || '',
     display_order: collection.displayOrder !== undefined ? Number(collection.displayOrder) : (collection.display_order !== undefined ? Number(collection.display_order) : 99),
     sort_order: collection.displayOrder !== undefined ? Number(collection.displayOrder) : (collection.display_order !== undefined ? Number(collection.display_order) : 99),
     active: collection.active !== undefined ? Boolean(collection.active) : true,

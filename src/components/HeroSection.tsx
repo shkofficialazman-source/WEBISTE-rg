@@ -10,33 +10,6 @@ interface HeroSectionProps {
   onNavigate: (route: string) => void;
 }
 
-const DEFAULT_SHOWCASE_ITEM: Product = {
-  id: 'hero-spotlight-default',
-  name: 'Porsche 911 GT3 RS Collector Edition',
-  category: 'scale-models',
-  price: 549,
-  originalPrice: 699,
-  image: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80',
-  description: 'Precision 1:64 scale die-cast collector model with realistic tampos and factory carded blister.',
-  shortTagline: 'Precision 1:64 Die-Cast Collector Casting',
-  stockCount: 12,
-  rating: 5,
-  reviewsCount: 28,
-  giftFeatures: [
-    'Collector Display Case Included',
-    'Express Dispatch in 24 Hours',
-    'Factory Carded Mint Guarantee',
-  ],
-  collectorSpecs: {
-    scale: '1:64 Scale',
-    casting: 'Porsche 911 GT3 RS',
-    series: 'Car Culture / Redline Special',
-    wheels: 'Real Riders Rubber Tires',
-    cardCondition: 'Factory Mint Carded',
-    authenticity: 'Official Licensed Mattel Genuine'
-  }
-};
-
 export const HeroSection: React.FC<HeroSectionProps> = ({
   heroProduct,
   products = [],
@@ -45,7 +18,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 }) => {
   // Strictly filter out any peer-to-peer marketplace items from the official showroom / featured casting pool
   const showroomPool = React.useMemo(() => {
-    const rawPool = products.length > 0 ? products : heroProduct ? [heroProduct] : [DEFAULT_SHOWCASE_ITEM];
+    const rawPool = products.length > 0 ? products : heroProduct ? [heroProduct] : [];
     const filtered = rawPool.filter(p => {
       if (!p) return false;
       const id = String(p.id || '').toLowerCase();
@@ -60,7 +33,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       return true;
     });
 
-    return filtered.length > 0 ? filtered : [DEFAULT_SHOWCASE_ITEM];
+    return filtered;
   }, [products, heroProduct]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -73,7 +46,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     return () => clearInterval(interval);
   }, [showroomPool.length]);
 
-  const currentProduct = showroomPool[currentIndex % (showroomPool.length || 1)] || null;
+  const currentProduct = showroomPool.length > 0 ? showroomPool[currentIndex % showroomPool.length] : null;
 
   return (
     <section className="relative bg-white text-zinc-900 overflow-hidden py-10 sm:py-16 md:py-20 border-b border-zinc-200/80">
@@ -162,73 +135,103 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           {/* Right Column - Spotlight Showcase Frame */}
           <div className="lg:col-span-5">
-            {currentProduct ? (
-              <div className="bg-zinc-50/70 border border-zinc-200/80 rounded-2xl p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all text-left">
-                <div className="flex items-center justify-between gap-2 pb-3 border-b border-zinc-200/60">
-                  <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-zinc-500">
-                    FEATURED CASTING #{currentIndex + 1}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setCurrentIndex((prev) => (prev - 1 + showroomPool.length) % showroomPool.length)}
-                      className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
-                      aria-label="Previous product"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setCurrentIndex((prev) => (prev + 1) % showroomPool.length)}
-                      className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
-                      aria-label="Next product"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div 
-                  onClick={() => onSelectProduct(currentProduct)}
-                  className="aspect-square bg-white rounded-xl overflow-hidden my-4 flex items-center justify-center p-4 cursor-pointer group relative border border-zinc-200/80"
-                >
-                  <ResponsiveImage
-                    src={currentProduct.image || currentProduct.imageUrl}
-                    alt={currentProduct.name}
-                    aspectRatio="auto"
-                    priority={true}
-                    objectFit="contain"
-                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute top-2 left-2 bg-zinc-950 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                    {currentProduct.collectorSpecs?.scale || '1:64 SCALE'}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 
-                      onClick={() => onSelectProduct(currentProduct)}
-                      className="text-base font-bold text-zinc-950 hover:text-red-600 transition-colors line-clamp-1 cursor-pointer font-sans"
-                    >
-                      {currentProduct.name}
-                    </h3>
-                    <span className="font-mono text-base font-black text-zinc-950">
-                      ₹{currentProduct.price.toLocaleString('en-IN')}
+            {currentProduct ? (() => {
+              const isSoldOut = currentProduct.stockCount !== undefined && currentProduct.stockCount <= 0;
+              return (
+                <div className="bg-zinc-50/70 border border-zinc-200/80 rounded-2xl p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all text-left">
+                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-zinc-200/60">
+                    <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-zinc-500">
+                      FEATURED CASTING #{currentIndex + 1}
                     </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setCurrentIndex((prev) => (prev - 1 + showroomPool.length) % showroomPool.length)}
+                        className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                        aria-label="Previous product"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentIndex((prev) => (prev + 1) % showroomPool.length)}
+                        className="p-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                        aria-label="Next product"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-200/60 text-[11px] font-mono text-zinc-500">
-                    <span>{currentProduct.collectorSpecs?.casting || currentProduct.series || 'Authentic Die-Cast'}</span>
-                    <button
-                      onClick={() => onSelectProduct(currentProduct)}
-                      className="text-zinc-950 hover:text-red-600 font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>View Details</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                  <div 
+                    onClick={() => onSelectProduct(currentProduct)}
+                    className="aspect-square bg-white rounded-xl overflow-hidden my-4 flex items-center justify-center p-4 cursor-pointer group relative border border-zinc-200/80"
+                  >
+                    <ResponsiveImage
+                      src={currentProduct.image || currentProduct.imageUrl}
+                      alt={currentProduct.name}
+                      aspectRatio="auto"
+                      priority={true}
+                      objectFit="contain"
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-2 left-2 bg-zinc-950 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                      {currentProduct.collectorSpecs?.scale || '1:64 SCALE'}
+                    </div>
+                    {isSoldOut && (
+                      <div className="absolute top-2 right-2 bg-zinc-950 text-white text-[9px] font-mono font-bold px-2.5 py-0.5 rounded uppercase tracking-wider shadow-xs">
+                        SOLD OUT
+                      </div>
+                    )}
+                    {isSoldOut && (
+                      <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+                        <span className="bg-zinc-950 text-white text-[11px] font-mono font-bold px-3.5 py-1 rounded-md uppercase tracking-wider shadow-md">
+                          SOLD OUT
+                        </span>
+                      </div>
+                    )}
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 
+                        onClick={() => onSelectProduct(currentProduct)}
+                        className="text-base font-bold text-zinc-950 hover:text-red-600 transition-colors line-clamp-1 cursor-pointer font-sans"
+                      >
+                        {currentProduct.name}
+                      </h3>
+                      <span className="font-mono text-base font-black text-zinc-950">
+                        ₹{currentProduct.price.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-200/60 text-[11px] font-mono text-zinc-500">
+                      <span>{currentProduct.collectorSpecs?.casting || currentProduct.series || 'Authentic Die-Cast'}</span>
+                      <button
+                        onClick={() => onSelectProduct(currentProduct)}
+                        className="text-zinc-950 hover:text-red-600 font-bold uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{isSoldOut ? 'View Archive' : 'View Details'}</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : (
+              /* Lightweight skeleton shimmer block while loading — zero images downloaded */
+              <div className="bg-zinc-50/80 border border-zinc-200/80 rounded-2xl p-5 sm:p-6 shadow-xs relative overflow-hidden text-left animate-pulse">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-200/60">
+                  <div className="h-3.5 w-28 bg-zinc-200 rounded"></div>
+                  <div className="h-6 w-16 bg-zinc-200 rounded"></div>
+                </div>
+                <div className="aspect-square bg-zinc-100 rounded-xl my-4 flex items-center justify-center border border-zinc-200/60">
+                  <div className="w-6 h-6 border-2 border-zinc-300 border-t-red-600 rounded-full animate-spin"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 bg-zinc-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-zinc-200 rounded w-1/2"></div>
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
 
         </div>

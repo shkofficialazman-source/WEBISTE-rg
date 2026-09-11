@@ -95,6 +95,7 @@ export const HomeSpotlightSection: React.FC<HomeSpotlightSectionProps> = ({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
           {spotlightProducts.map((product) => {
             const inWishlist = isWishlisted(product.id);
+            const isOutOfStock = product.stockCount !== undefined && product.stockCount <= 0;
             return (
               <div
                 key={product.id}
@@ -104,7 +105,7 @@ export const HomeSpotlightSection: React.FC<HomeSpotlightSectionProps> = ({
                 {/* Badge */}
                 <div className="absolute top-4 left-4 z-10">
                   <span className="bg-zinc-950 text-white text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-md shadow-xs">
-                    Spotlight
+                    {isOutOfStock ? 'Sold Out' : 'Spotlight'}
                   </span>
                 </div>
 
@@ -118,17 +119,24 @@ export const HomeSpotlightSection: React.FC<HomeSpotlightSectionProps> = ({
                 </button>
 
                 {/* Image */}
-                <div className="aspect-square bg-zinc-50/70 p-4 sm:p-6 flex items-center justify-center overflow-hidden border-b border-zinc-100">
+                <div className="aspect-square bg-zinc-50/70 p-4 sm:p-6 flex items-center justify-center overflow-hidden border-b border-zinc-100 relative">
                   <img
                     src={getOptimizedImageUrl(product.image, { width: 400, quality: 75, format: 'auto', fit: 'contain' })}
                     alt={product.name}
                     referrerPolicy="no-referrer"
                     width={300}
                     height={300}
-                    className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105"
+                    className={`w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105 ${isOutOfStock ? 'opacity-50' : ''}`}
                     loading="lazy"
                     decoding="async"
                   />
+                  {isOutOfStock && (
+                    <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-10">
+                      <span className="bg-zinc-950 text-white text-[10px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-wider shadow-sm">
+                        SOLD OUT
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Info */}
@@ -150,12 +158,21 @@ export const HomeSpotlightSection: React.FC<HomeSpotlightSectionProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onAddToCart(product, 1);
+                        if (!isOutOfStock) onAddToCart(product, 1);
                       }}
-                      className="bg-zinc-950 hover:bg-red-600 text-white p-2.5 rounded-xl transition-colors cursor-pointer shadow-xs"
-                      title="Add to Cart"
+                      disabled={isOutOfStock}
+                      className={`p-2.5 rounded-xl transition-colors shadow-xs ${
+                        isOutOfStock
+                          ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed px-3'
+                          : 'bg-zinc-950 hover:bg-red-600 text-white cursor-pointer'
+                      }`}
+                      title={isOutOfStock ? 'Sold Out' : 'Add to Cart'}
                     >
-                      <ShoppingBag className="w-4 h-4" />
+                      {isOutOfStock ? (
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider">Sold Out</span>
+                      ) : (
+                        <ShoppingBag className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>

@@ -3350,7 +3350,13 @@ If you need any assistance with your shipment, feel free to reply directly to th
                       {inventoryMetrics.lowStockProducts.map((p) => (
                         <div key={p.id} className="py-3 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <img src={p.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
+                            {p.image ? (
+                              <img src={p.image} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-zinc-200 bg-zinc-100" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400">
+                                <Car className="w-5 h-5" />
+                              </div>
+                            )}
                             <div>
                               <div className="font-bold text-sm text-zinc-900">{p.name}</div>
                               <div className="text-[11px] text-red-600 font-mono font-bold">Only {p.stockCount} units remaining in stock</div>
@@ -4215,12 +4221,18 @@ If you need any assistance with your shipment, feel free to reply directly to th
                             className="flex items-center justify-between bg-white border border-zinc-200 rounded-xl p-2 hover:border-zinc-300 transition text-xs"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <img
-                                src={prod.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
-                                alt={prod.name}
-                                referrerPolicy="no-referrer"
-                                className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0"
-                              />
+                              {prod.image ? (
+                                <img
+                                  src={prod.image}
+                                  alt={prod.name}
+                                  referrerPolicy="no-referrer"
+                                  className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400 shrink-0">
+                                  <Car className="w-4 h-4" />
+                                </div>
+                              )}
                               <div className="truncate">
                                 <span className="font-bold text-zinc-900 font-sans block truncate">{prod.name}</span>
                                 <span className="text-[10px] text-zinc-500">Primary: {prod.category} • ₹{prod.price}</span>
@@ -4306,12 +4318,18 @@ If you need any assistance with your shipment, feel free to reply directly to th
                               </div>
                             </div>
 
-                            <img
-                              src={prod.image || 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75'}
-                              alt={prod.name}
-                              referrerPolicy="no-referrer"
-                              className="w-10 h-10 rounded-xl object-cover border border-zinc-200 shrink-0"
-                            />
+                            {prod.image ? (
+                              <img
+                                src={prod.image}
+                                alt={prod.name}
+                                referrerPolicy="no-referrer"
+                                className="w-10 h-10 rounded-xl object-cover border border-zinc-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400 shrink-0">
+                                <Car className="w-5 h-5" />
+                              </div>
+                            )}
                             <div className="truncate">
                               <span className="font-bold text-zinc-900 font-sans text-xs block truncate">
                                 {prod.name}

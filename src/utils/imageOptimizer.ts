@@ -17,7 +17,7 @@ export interface ImageOptimizationOptions {
   fit?: 'crop' | 'cover' | 'contain' | 'inside';
 }
 
-export const DEFAULT_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=800&auto=format&fit=crop&q=80';
+export const DEFAULT_FALLBACK_IMAGE = '';
 
 /**
  * Optimizes an arbitrary image URL for fast mobile & desktop delivery.
@@ -29,7 +29,7 @@ export function getOptimizedImageUrl(
   options: ImageOptimizationOptions = {}
 ): string {
   if (!url || typeof url !== 'string' || url.trim() === '') {
-    return DEFAULT_FALLBACK_IMAGE;
+    return '';
   }
   const cleanUrl = url.trim();
   if (cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl;

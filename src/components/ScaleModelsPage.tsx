@@ -396,6 +396,7 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {filteredAndSorted.map((product) => {
               const inWishlist = isWishlisted(product.id);
+              const isOutOfStock = product.stockCount !== undefined && product.stockCount <= 0;
               return (
                 <div
                   key={product.id}
@@ -404,15 +405,23 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
                 >
                   {/* Card Badges */}
                   <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none">
-                    {product.isBestSeller && (
-                      <span className="bg-zinc-900 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-xs">
-                        Vault Pick
+                    {isOutOfStock ? (
+                      <span className="bg-zinc-950 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md shadow-xs">
+                        Sold Out
                       </span>
-                    )}
-                    {product.stockCount <= 3 && product.stockCount > 0 && (
-                      <span className="bg-red-600 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-xs">
-                        Only {product.stockCount} Left
-                      </span>
+                    ) : (
+                      <>
+                        {product.isBestSeller && (
+                          <span className="bg-zinc-900 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-xs">
+                            Vault Pick
+                          </span>
+                        )}
+                        {product.stockCount <= 3 && product.stockCount > 0 && (
+                          <span className="bg-red-600 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-xs">
+                            Only {product.stockCount} Left
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -431,9 +440,16 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
                       src={product.image}
                       alt={product.name}
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105"
+                      className={`w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105 ${isOutOfStock ? 'opacity-50' : ''}`}
                       loading="lazy"
                     />
+                    {isOutOfStock && (
+                      <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-10">
+                        <span className="bg-zinc-950 text-white text-[10px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-wider shadow-sm">
+                          SOLD OUT
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Product Details */}
@@ -462,12 +478,21 @@ export const ScaleModelsPage: React.FC<ScaleModelsPageProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onAddToCart(product, 1);
+                          if (!isOutOfStock) onAddToCart(product, 1);
                         }}
-                        className="bg-zinc-900 hover:bg-red-600 text-white p-2.5 rounded-xl transition-colors flex items-center justify-center cursor-pointer shadow-xs"
-                        title="Add to Cart"
+                        disabled={isOutOfStock}
+                        className={`p-2.5 rounded-xl transition-colors flex items-center justify-center shadow-xs text-xs font-mono font-bold ${
+                          isOutOfStock
+                            ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed px-2.5'
+                            : 'bg-zinc-900 hover:bg-red-600 text-white cursor-pointer'
+                        }`}
+                        title={isOutOfStock ? 'Sold Out' : 'Add to Cart'}
                       >
-                        <ShoppingBag className="w-4 h-4" />
+                        {isOutOfStock ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Sold Out</span>
+                        ) : (
+                          <ShoppingBag className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
                   </div>

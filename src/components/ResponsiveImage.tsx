@@ -40,7 +40,7 @@ export const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
   priority = false,
   sizes = '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw',
   onClick,
-  fallbackSrc = DEFAULT_FALLBACK_IMAGE,
+  fallbackSrc = '',
   objectFit = 'contain',
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -50,17 +50,17 @@ export const ResponsiveImage: React.FC<ResponsiveImageProps> = ({
 
   // Clean and sanitize incoming src
   const rawSrc = src && typeof src === 'string' && src.trim().length > 0 ? src.trim() : null;
-  const targetSrc = hasPrimaryError ? fallbackSrc : (rawSrc || fallbackSrc);
-  const isCompletelyBroken = hasFallbackError || (!rawSrc && !fallbackSrc);
+  const targetSrc = hasPrimaryError ? (fallbackSrc || '') : (rawSrc || fallbackSrc || '');
+  const isCompletelyBroken = !targetSrc || hasFallbackError;
 
-  const optimizedSrc = getOptimizedImageUrl(targetSrc, {
+  const optimizedSrc = targetSrc ? getOptimizedImageUrl(targetSrc, {
     width: priority ? 800 : 640,
     quality: priority ? 80 : 75,
     format: 'auto',
     fit: objectFit === 'contain' ? 'contain' : 'cover',
-  });
+  }) : '';
 
-  const srcSet = (!hasPrimaryError && rawSrc) ? buildResponsiveSrcSet(targetSrc) : undefined;
+  const srcSet = (!hasPrimaryError && rawSrc && targetSrc) ? buildResponsiveSrcSet(targetSrc) : undefined;
 
   // Reset error & load state when incoming source prop changes
   useEffect(() => {

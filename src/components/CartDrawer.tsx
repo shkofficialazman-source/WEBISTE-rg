@@ -5,7 +5,7 @@ import {
   X, Trash2, Plus, Minus, ShoppingBag, CheckCircle2, ArrowRight, Cloud, 
   MessageCircle, Copy, Check, Smartphone, ChevronLeft, AlertCircle, 
   Tag, Award, Sparkles, Send, ShieldAlert, ShieldCheck, Upload, Image as ImageIcon,
-  Camera, RefreshCw, Eye, Gift, Percent, Receipt
+  Camera, RefreshCw, Eye, Gift, Percent, Receipt, Car
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { saveOrderToFirestore } from '../firebase';
@@ -642,65 +642,82 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             ) : (
               <div className="p-4 sm:p-5 flex-1 overflow-y-auto divide-y divide-zinc-200">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="py-4 first:pt-0 last:pb-0 flex gap-3 text-left">
-                    <img
-                      src={getOptimizedImageUrl(item.product.image, { width: 140, height: 140, quality: 75 })}
-                      alt={`${item.product.name} - Official Redline Garage Hot Wheels`}
-                      width={64}
-                      height={64}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-16 h-16 object-cover rounded-xl border border-zinc-200 shrink-0 bg-zinc-100"
-                    />
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <h4 className="font-bold text-sm text-zinc-900 font-sans leading-tight">
-                            {item.product.name}
-                          </h4>
-                          {item.customization && (
-                            <p className="text-[10px] text-red-600 font-mono mt-0.5">
-                              Custom: {item.customization.driverName} ({item.customization.carTitle})
-                            </p>
-                          )}
+                {cartItems.map((item) => {
+                  const isItemOutOfStock = item.product.stockCount !== undefined && item.product.stockCount <= 0;
+                  return (
+                    <div key={item.id} className="py-4 first:pt-0 last:pb-0 flex gap-3 text-left">
+                      {item.product.image ? (
+                        <img
+                          src={getOptimizedImageUrl(item.product.image, { width: 140, height: 140, quality: 75 })}
+                          alt={`${item.product.name} - Official Redline Garage Hot Wheels`}
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
+                          className={`w-16 h-16 object-cover rounded-xl border border-zinc-200 shrink-0 bg-zinc-100 ${isItemOutOfStock ? 'opacity-50' : ''}`}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-xl border border-zinc-200 shrink-0 bg-zinc-100 flex items-center justify-center text-zinc-400">
+                          <Car className="w-6 h-6" />
                         </div>
-                        <button
-                          onClick={() => onRemoveItem(item.id)}
-                          className="text-zinc-400 hover:text-red-600 p-1 rounded transition cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
-                          aria-label="Remove Item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      )}
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="font-bold text-sm text-zinc-900 font-sans leading-tight">
+                                {item.product.name}
+                              </h4>
+                              {isItemOutOfStock && (
+                                <span className="bg-zinc-950 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
+                                  Sold Out
+                                </span>
+                              )}
+                            </div>
+                            {item.customization && (
+                              <p className="text-[10px] text-red-600 font-mono mt-0.5">
+                                Custom: {item.customization.driverName} ({item.customization.carTitle})
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onRemoveItem(item.id)}
+                            className="text-zinc-400 hover:text-red-600 p-1 rounded transition cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
+                            aria-label="Remove Item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
 
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="font-extrabold text-sm text-zinc-900 font-mono">
-                          ₹{(item.product.price * item.quantity).toFixed(2)}
-                        </span>
-                        <div className="flex items-center gap-2 bg-zinc-100 rounded-lg p-1 border border-zinc-200">
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, -1)}
-                            className="p-1 hover:bg-zinc-200 rounded text-zinc-600 transition cursor-pointer min-h-[28px] min-w-[28px] flex items-center justify-center"
-                            aria-label="Decrease Quantity"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="text-xs font-bold font-mono px-1 min-w-[1.25rem] text-center text-zinc-900">
-                            {item.quantity}
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="font-extrabold text-sm text-zinc-900 font-mono">
+                            ₹{(item.product.price * item.quantity).toFixed(2)}
                           </span>
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, 1)}
-                            className="p-1 hover:bg-zinc-200 rounded text-zinc-600 transition cursor-pointer min-h-[28px] min-w-[28px] flex items-center justify-center"
-                            aria-label="Increase Quantity"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-2 bg-zinc-100 rounded-lg p-1 border border-zinc-200">
+                            <button
+                              onClick={() => onUpdateQuantity(item.id, -1)}
+                              className="p-1 hover:bg-zinc-200 rounded text-zinc-600 transition cursor-pointer min-h-[28px] min-w-[28px] flex items-center justify-center"
+                              aria-label="Decrease Quantity"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-xs font-bold font-mono px-1 min-w-[1.25rem] text-center text-zinc-900">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => onUpdateQuantity(item.id, 1)}
+                              disabled={isItemOutOfStock}
+                              className={`p-1 rounded transition min-h-[28px] min-w-[28px] flex items-center justify-center ${isItemOutOfStock ? 'text-zinc-300 cursor-not-allowed' : 'hover:bg-zinc-200 text-zinc-600 cursor-pointer'}`}
+                              aria-label="Increase Quantity"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

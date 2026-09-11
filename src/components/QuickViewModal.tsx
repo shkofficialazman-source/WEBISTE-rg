@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
 import { saveOrderToSupabase } from '../supabase';
-import { appendOrderToGoogleSheet } from '../googleSheets';
 import {
   X,
   Star,
@@ -26,15 +25,13 @@ interface QuickViewModalProps {
   onAddToCart: (product: Product, quantity?: number, customization?: any) => void;
 }
 
-const DEFAULT_PRODUCT_FALLBACK = 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=75';
-
 export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   product,
   onClose,
   onAddToCart,
 }) => {
   const [activeImage, setActiveImage] = useState<string>(
-    product?.galleryImages?.[0] || product?.image || product?.imageUrl || DEFAULT_PRODUCT_FALLBACK
+    product?.galleryImages?.[0] || product?.image || product?.imageUrl || ''
   );
   const [quantity, setQuantity] = useState<number>(1);
   const [customDriverName, setCustomDriverName] = useState<string>('');
@@ -44,7 +41,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
 
   React.useEffect(() => {
     if (product) {
-      setActiveImage(product.galleryImages?.[0] || product.image || product.imageUrl || DEFAULT_PRODUCT_FALLBACK);
+      setActiveImage(product.galleryImages?.[0] || product.image || product.imageUrl || '');
       setQuantity(1);
       setCustomDriverName('');
       setCustomCarTitle('');
@@ -191,17 +188,19 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
               {/* Quantity Selector */}
               <div className="flex items-center justify-between py-2 border-t border-b border-zinc-100">
                 <span className="text-xs font-mono font-bold uppercase text-zinc-700">Quantity</span>
-                <div className="flex items-center gap-2 border border-zinc-300 rounded-lg p-1 bg-zinc-50">
+                <div className={`flex items-center gap-2 border border-zinc-300 rounded-lg p-1 bg-zinc-50 ${isOutOfStock ? 'opacity-50' : ''}`}>
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="p-1 text-zinc-600 hover:text-zinc-900 cursor-pointer"
+                    disabled={isOutOfStock}
+                    className={`p-1 text-zinc-600 hover:text-zinc-900 ${isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <span className="font-mono text-xs font-bold px-2">{quantity}</span>
                   <button
                     onClick={() => setQuantity(quantity + 1)}
-                    className="p-1 text-zinc-600 hover:text-zinc-900 cursor-pointer"
+                    disabled={isOutOfStock}
+                    className={`p-1 text-zinc-600 hover:text-zinc-900 ${isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>

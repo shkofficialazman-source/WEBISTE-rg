@@ -575,8 +575,15 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                         aspectRatio="auto"
                         objectFit="contain"
                         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 300px"
-                        className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? 'opacity-50' : ''}`}
                       />
+                      {isOutOfStock && (
+                        <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-10">
+                          <span className="bg-zinc-950 text-white text-[10px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-wider shadow-sm">
+                            SOLD OUT
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Product Details */}
@@ -613,7 +620,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                           }`}
                         >
                           <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>{isOutOfStock ? 'Sold' : 'Buy'}</span>
+                          <span>{isOutOfStock ? 'Sold Out' : 'Buy'}</span>
                         </button>
 
                         <a
